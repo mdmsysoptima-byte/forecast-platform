@@ -6,6 +6,10 @@ raporlar.
 
 Arayüz Türkçe, kod ve veritabanı nesneleri İngilizce.
 
+Ekranları denemek için kurulum gerekmez:
+**<https://mdmsysoptima-byte.github.io/forecast-platform/>**
+(sunucusuz mock sürüm — veriler sabit, değişiklikler kaydedilmez).
+
 ---
 
 ## 1. Kurulum ve çalıştırma
@@ -379,6 +383,8 @@ veritabanı sıfırlanır ve `AUTO_SEED` demo verisini yeniden kurar (yaklaşık
 `render.yaml` içindeki disk bloğunu açın ve `DATA_DIR` oraya baksın.
 
 ### Mock sürüm (GitHub Pages)
+
+**Yayında:** <https://mdmsysoptima-byte.github.io/forecast-platform/>
 
 `mock/` klasörü ekranların sunucusuz halidir: giriş yok, API yok, veriler
 `mock/data/` altında JSON. Pages burayı sunabilir. Ön yüz kodu kopyalanmaz,

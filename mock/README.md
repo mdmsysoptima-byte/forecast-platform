@@ -1,5 +1,7 @@
 # Mock sürüm
 
+**Yayında:** <https://mdmsysoptima-byte.github.io/forecast-platform/>
+
 Ekranların sunucusuz hali. GitHub Pages yalnızca dosya sunar, Python
 çalıştırmaz; burası o kısıt için var. Giriş ekranı yoktur, veriler sabittir,
 yazma işlemleri kaydedilmez.
