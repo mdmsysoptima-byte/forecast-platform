@@ -1,0 +1,1 @@
+{"driver_sets":[{"id":1,"name":"Baz","description":"Orta vadeli program çizgisinde enflasyon ve kur","is_shared":true},{"id":2,"name":"Yüksek enflasyon","description":"Aylık yüzde 4 enflasyon, kur yüzde 3,5","is_shared":true},{"id":3,"name":"Kur şoku","description":"Kur aylık yüzde 5,5, enflasyon sınırlı","is_shared":true}],"summary":"3 sürücü seti"}

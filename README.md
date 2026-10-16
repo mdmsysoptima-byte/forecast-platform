@@ -378,6 +378,19 @@ veritabanı sıfırlanır ve `AUTO_SEED` demo verisini yeniden kurar (yaklaşık
 8 saniye). Demo için doğru davranış budur. Gerçek veriyle çalışacaksanız
 `render.yaml` içindeki disk bloğunu açın ve `DATA_DIR` oraya baksın.
 
+### Mock sürüm (GitHub Pages)
+
+`mock/` klasörü ekranların sunucusuz halidir: giriş yok, API yok, veriler
+`mock/data/` altında JSON. Pages burayı sunabilir. Ön yüz kodu kopyalanmaz,
+`../frontend/static/...` diye kullanılır — ön yüzde yapılan değişiklik mock'a
+anında yansır. Yalnızca backend ya da demo verisi değişince yeniden yakalayın:
+
+```powershell
+python tools/build_mock.py     # uygulama ayaktayken
+```
+
+Ayrıntı ve sınırlar: [`mock/README.md`](mock/README.md).
+
 **Güvenlik.** Demo kullanıcıları sabit bir şifre paylaşır ve biri admin'dir.
 Açık bir adreste yayınlıyorsanız `DEMO_PASSWORD`'ü mutlaka değiştirin; aksi
 halde adresi bilen herkes yönetici olarak girip veriyi değiştirebilir. Gerçek

@@ -1,0 +1,1 @@
+{"measures":[{"code":"units","name":"Adet","unit_type":"quantity","base_unit":"adet","formula":null},{"code":"revenue","name":"Ciro","unit_type":"value","base_unit":"TRY","formula":"units * price"}],"summary":"2 ölçü"}

@@ -1,0 +1,1 @@
+{"rule":"planner_then_sales_then_statistical","priority":["planner","sales","statistical"],"weights":{"statistical":0.5,"sales":0.3,"marketing":0.2},"mode":"priority","options":["planner_then_sales_then_statistical","planner_then_marketing_then_sales_then_statistical","sales_then_statistical","weighted_average"],"summary":"Aktif kural: planner_then_sales_then_statistical"}
