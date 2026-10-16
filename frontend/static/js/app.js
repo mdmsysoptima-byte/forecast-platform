@@ -42,7 +42,11 @@ export const state = {
     history: 12,
     startLabel: null,
     endLabel: null,
-    versionId: null,
+    // Karsilastirilan modeller; tablo satirlari ve grafik cizgileri bu secim.
+    models: ["statistical", "consensus"],
+    gapModel: "consensus",
+    // Toplam mi donem ortalamasi mi; tum sayfa buna uyar.
+    aggregate: "total",
     scope: {},
     view: "nominal",
     currency: "USD",

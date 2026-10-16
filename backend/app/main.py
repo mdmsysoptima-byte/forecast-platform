@@ -35,6 +35,7 @@ async def lifespan(app: FastAPI):
     from app.adapters import get_store
 
     get_store().init_schema()
+    _seed_if_empty()
     try:
         with session_scope() as db:
             from app.forecast_models import registry, runner
@@ -49,6 +50,32 @@ async def lifespan(app: FastAPI):
         log.exception("başlangıç bakimi atlandı")
     log.info("%s hazır", settings.app_name)
     yield
+
+
+def _seed_if_empty() -> None:
+    """Boş bir veritabanıyla açılan sunucu demo verisini kendisi kurar.
+
+    Sunucuda disk kalıcı değilse her yeniden başlatmada veri sıfırlanır; demo
+    için doğru davranış budur, kurulumun elle yapılması gerekmez. AUTO_SEED
+    kapalıyken hiçbir şey yapmaz, yerel geliştirmeyi etkilemez.
+    """
+    if not settings.auto_seed:
+        return
+    try:
+        from sqlalchemy import func, select
+
+        from app.domain.models import User
+
+        with session_scope() as db:
+            if db.execute(select(func.count(User.id))).scalar_one():
+                return
+        log.info("veritabanı boş, demo verisi kuruluyor")
+        from app.demo.loader import load_demo
+
+        summary = load_demo(reset=False)
+        log.info("demo verisi hazır", extra={"series": summary.get("series")})
+    except Exception:  # noqa: BLE001  pragma: no cover
+        log.exception("demo kurulumu başarısız, uygulama boş veriyle açılıyor")
 
 
 app = FastAPI(

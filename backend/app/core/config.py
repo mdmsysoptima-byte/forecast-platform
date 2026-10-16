@@ -8,11 +8,16 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
+def _data_dir() -> Path:
+    """Veri dizini. Sunucuda kalıcı disk başka bir yola bağlanabilir."""
+    return Path(os.getenv("DATA_DIR") or (REPO_ROOT / "data"))
+
+
 @dataclass
 class Settings:
     app_name: str = "Forecast Platform"
     repo_root: Path = REPO_ROOT
-    data_dir: Path = field(default_factory=lambda: REPO_ROOT / "data")
+    data_dir: Path = field(default_factory=_data_dir)
 
     # Application database (meta, layer values, audit).
     app_db_url: str = os.getenv("APP_DB_URL", "")
@@ -26,6 +31,9 @@ class Settings:
     draft_ttl_days: int = int(os.getenv("DRAFT_TTL_DAYS", "7"))
     display_tz: str = "Europe/Istanbul"
     demo_password: str = os.getenv("DEMO_PASSWORD", "demo")
+    # Bos bir veritabaniyla acilan sunucuda demo verisini kendisi kurar. Yeni
+    # kurulan bir ortam aksi halde giris ekraninda takilip kalir.
+    auto_seed: bool = os.getenv("AUTO_SEED", "0") == "1"
 
     def __post_init__(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)

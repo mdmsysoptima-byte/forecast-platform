@@ -34,17 +34,31 @@ HORIZON_CHOICES = [6, 12, 18]
 HISTORY_CHOICES = [6, 12, 18]
 GRAIN_CHOICES = [("month", "Ay"), ("quarter", "Çeyrek"), ("year", "Yıl")]
 VIEW_CHOICES = [("nominal", "Nominal TL"), ("real", "Reel TL"), ("fx", "Döviz")]
-CHART_LAYERS = ["statistical", "consensus", "budget", "last_year"]
-# Karsilastirma tablosunda satir olan katmanlar, sirayla Model 1..N olarak
-# etiketlenir. Butce burada yok: snapshot'i olmadigi icin MAPE'si hesaplanamaz,
-# zaten kendi grafiginde duruyor. Pazarlama da yok: gelecek donemlerde hic
-# degeri olmadigi icin satiri bastan sona bos kaliyordu.
-TABLE_LAYERS = ["statistical", "sales", "planner", "consensus"]
-NEEDED_LAYERS = sorted(set(CHART_LAYERS) | set(TABLE_LAYERS))
+REFERENCE_LAYERS = ["budget", "last_year"]
+
+# Kokpitte karsilastirilan modeller, sirayla Model 1..N.
+#
+# Her modelin bir "dusme zinciri" var. Katkici katmanlari (satis, planlamaci)
+# gelecekte yalnizca dokunulan hucreleri tasiyor; ham haliyle okunursa toplam
+# istatistikselin yuzde uc'u kadar cikiyor ve model cokmuş gibi gorunuyor.
+# Dogrusu her katmani "kendi degeri, yoksa bir altindaki" diye okumak: konsensus
+# kurali (planner > sales > statistical) zaten boyle calisiyor ve gecmis
+# snapshot'lar da boyle uretilmis. Boylece dort model de tam bir tahmin olur.
+MODEL_CHAINS = [
+    ("statistical", ["statistical"]),
+    ("sales", ["sales", "statistical"]),
+    ("planner", ["planner", "sales", "statistical"]),
+    ("consensus", ["consensus"]),
+]
+MODEL_CODES = [code for code, _chain in MODEL_CHAINS]
+MODEL_LABELS = {code: f"Model {i + 1}" for i, (code, _c) in enumerate(MODEL_CHAINS)}
+NEEDED_LAYERS = sorted({c for _m, chain in MODEL_CHAINS for c in chain} | set(REFERENCE_LAYERS))
 # Tabloda kendi gecmis/gelecek sutun ciftini tasiyan olculer.
 HEADLINE_MEASURES = ["units", "revenue"]
 WINDOW_MODES = [("periods", "Dönem sayısı"), ("range", "Tarih aralığı")]
+AGGREGATES = [("total", "Toplam"), ("average", "Ortalama")]
 DEFAULT_LAG = 1
+DEFAULT_MODELS = ["statistical", "consensus"]
 
 
 @dataclass
@@ -61,9 +75,23 @@ class CockpitQuery:
     start_label: str | None = None
     end_label: str | None = None
     lag: int = DEFAULT_LAG
+    # Karsilastirilacak modeller; tablo satirlari ve grafik cizgileri bu secim.
+    models: list[str] = field(default_factory=lambda: list(DEFAULT_MODELS))
+    # Butce farki grafigi tek bir model uzerinden okunur, secenekleri models'dan.
+    gap_model: str | None = None
+    # Toplam mi donem ortalamasi mi; tablo ve grafiklerin tamami buna uyar.
+    aggregate: str = "total"
     scope: dict = field(default_factory=dict)
     view: str = "nominal"
     currency: str = "TRY"
+
+    def selected_models(self) -> list[str]:
+        picked = [c for c in MODEL_CODES if c in (self.models or [])]
+        return picked or list(DEFAULT_MODELS)
+
+    def selected_gap_model(self) -> str:
+        picked = self.selected_models()
+        return self.gap_model if self.gap_model in picked else picked[-1]
 
 
 def _pick_version(db: Session, version_id: int | None) -> Version | None:
@@ -215,22 +243,17 @@ def overview(db: Session, principal: Principal, q: CockpitQuery) -> dict:
     # cikti" sorusu ekranin ana sorusu. Gecmis donemlerin tahmini snapshot'tan
     # gelir; layer_value gecmisi tutmuyor ve zaten dogrusu snapshot'tir.
     past_ids = {b.id for b in history}
-    past_forecast = {
-        code: acc.snapshot_values(db, code, q.lag or DEFAULT_LAG, scope_keys, past_ids)
-        for code in ("statistical", "consensus")
+    selected = q.selected_models()
+    model_raw = {
+        code: _effective_model(db, layer_raw, chain, past_ids, scope_keys, q.lag or DEFAULT_LAG, acc)
+        for code, chain in MODEL_CHAINS if code in selected
     }
     # Gecen yil, gecmis bir donem icin 12 ay oncesinin gerceklesenidir.
     past_last_year = _shifted_actuals(db, store, cycle, scope_keys, history, 12)
 
-    def joined(code):
-        """Geçmiş ve gelecek tek bir seride; çizgi mevcut dönemde kesilmez."""
-        merged = dict(past_forecast.get(code, {}))
-        merged.update({k: v for k, v in layer_raw[code].items() if k[1] not in past_ids})
-        return merged
-
     series_out = {"actual": shaped(actual_raw, q.measure)}
-    series_out["statistical"] = shaped(joined("statistical"), q.measure)
-    series_out["consensus"] = shaped(joined("consensus"), q.measure)
+    for code, values in model_raw.items():
+        series_out[code] = shaped(values, q.measure)
     series_out["budget"] = shaped(layer_raw["budget"], q.measure)
     last_year_all = dict(past_last_year)
     last_year_all.update({k: v for k, v in layer_raw["last_year"].items() if k[1] not in past_ids})
@@ -247,16 +270,22 @@ def overview(db: Session, principal: Principal, q: CockpitQuery) -> dict:
     target_buckets = _target_buckets(db, cycle, q.grain, month_buckets)
     flags = cycle_svc.period_flags(db, cycle)
     current_index = _current_index(target_buckets, current, q.grain)
+    # Ortalama modunda her kova, icine giren ay sayisina bolunur. Pencerenin
+    # ucundaki yarim ceyrekler eksik ay tasiyabildigi icin bolen sabit degil,
+    # kova basina sayilir.
+    span = _bucket_spans(db, cycle, q.grain, month_buckets, target_buckets)
+    divisor = (lambda bid: span.get(bid, 1) or 1) if q.aggregate == "average" else (lambda _bid: 1)
 
     def column(code):
-        return [round(series_out[code].get(b.id), 2) if b.id in series_out[code] else None
-                for b in target_buckets]
+        out = series_out.get(code, {})
+        return [round(out[b.id] / divisor(b.id), 2) if b.id in out else None for b in target_buckets]
 
-    stat = column("statistical")
-    half = [round(math.sqrt(variance.get(b.id, 0.0)), 2) if variance.get(b.id) else None
+    half = [round(math.sqrt(variance.get(b.id, 0.0)) / divisor(b.id), 2) if variance.get(b.id) else None
             for b in target_buckets]
-    lower = [round(max(0.0, s - h), 2) if s is not None and h else None for s, h in zip(stat, half)]
-    upper = [round(s + h, 2) if s is not None and h else None for s, h in zip(stat, half)]
+    # Belirsizlik bandi modelin ham ciktisina ait; o model secili degilse band yok.
+    band_base = column("statistical") if "statistical" in model_raw else [None] * len(target_buckets)
+    lower = [round(max(0.0, s - h), 2) if s is not None and h else None for s, h in zip(band_base, half)]
+    upper = [round(s + h, 2) if s is not None and h else None for s, h in zip(band_base, half)]
 
     timeline = {
         "buckets": [
@@ -268,10 +297,9 @@ def overview(db: Session, principal: Principal, q: CockpitQuery) -> dict:
             for b in target_buckets
         ],
         "current_index": current_index,
+        "models": [{"code": c, "label": MODEL_LABELS[c], "points": column(c)} for c in selected],
         "series": {
             "actual": column("actual"),
-            "statistical": stat,
-            "consensus": column("consensus"),
             "budget": column("budget"),
             "last_year": column("last_year"),
             "lower": lower,
@@ -279,19 +307,22 @@ def overview(db: Session, principal: Principal, q: CockpitQuery) -> dict:
         },
     }
 
-    table = _model_table(
-        db, q, cycle, scope_keys, history, future, month_ids, actual_raw, layer_raw, cache,
-    )
-    charts = _charts(db, q, target_buckets, series_out, current_index)
+    table = _model_table(db, q, cycle, scope_keys, history, future, month_ids,
+                         actual_raw, model_raw, layer_raw, cache)
+    accuracy = _accuracy_table(db, q, scope_keys, past_ids, future_ids, model_raw, layer_raw)
+    gap_model = q.selected_gap_model()
+    charts = _charts(db, q, target_buckets, series_out, gap_model, divisor)
 
     measure = db.execute(select(Measure).where(Measure.code == q.measure)).scalar_one_or_none()
-    total = sum(v for v in series_out["consensus"].values())
+    headline = selected[-1]
+    total = sum(series_out[headline].values())
     return {
         "cycle": _cycle_block(db, cycle, current),
         "version": _version_block(version),
         "options": _options(db, cycle, principal),
         "timeline": timeline,
         "table": table,
+        "accuracy": accuracy,
         "charts": charts,
         "meta": {
             "measure": q.measure,
@@ -299,6 +330,9 @@ def overview(db: Session, principal: Principal, q: CockpitQuery) -> dict:
             "unit": measure.base_unit if measure else "",
             "unit_type": measure.unit_type if measure else "quantity",
             "grain": q.grain, "view": q.view, "currency": q.currency,
+            "aggregate": q.aggregate,
+            "models": selected,
+            "gap_model": gap_model,
             "scope": q.scope or {},
             "window_mode": q.window_mode,
             "start_label": history[0].label if history else (future[0].label if future else ""),
@@ -308,10 +342,39 @@ def overview(db: Session, principal: Principal, q: CockpitQuery) -> dict:
             "restricted": not principal.unrestricted,
         },
         "summary": (
-            f"{version.name}: {len(future)} dönemlik konsensüs toplamı {total:,.0f}, "
+            f"{MODEL_LABELS[headline]}: {len(future)} dönemlik toplam {total:,.0f}, "
             f"{len(scope_keys)} seri, {q.grain} kovası"
         ),
     }
+
+
+def _effective_model(db, layer_raw, chain, past_ids, scope_keys, lag, acc_mod) -> dict:
+    """Bir modelin pencere boyunca kesintisiz değer dizisi.
+
+    Geçmiş snapshot'tan gelir ve orada her katman zaten tam. Gelecekte katkıcı
+    katmanları seyrek olduğu için zincir boyunca düşülür: kendi değeri yoksa
+    bir altındaki katmanın değeri. Konsensüs kuralının mantığı budur.
+    """
+    head = chain[0]
+    out = dict(acc_mod.snapshot_values(db, head, lag, scope_keys, past_ids))
+    for code in reversed(chain):
+        for key, value in layer_raw.get(code, {}).items():
+            if key[1] not in past_ids:
+                out[key] = value
+    return out
+
+
+def _bucket_spans(db, cycle, grain, month_buckets, target_buckets) -> dict[int, int]:
+    """Hedef kova başına, pencereden içine giren aylık kova sayısı."""
+    if grain == cycle.grain:
+        return {b.id: 1 for b in target_buckets}
+    spans: dict[int, int] = defaultdict(int)
+    for m in month_buckets:
+        for t in target_buckets:
+            if t.start_date <= m.start_date <= t.end_date:
+                spans[t.id] += 1
+                break
+    return dict(spans)
 
 
 def _shifted_actuals(db, store, cycle, scope_keys, history, months_back: int) -> dict:
@@ -440,6 +503,13 @@ def _options(db: Session, cycle: Cycle, principal: Principal) -> dict:
         "horizons": [h for h in HORIZON_CHOICES if h <= cycle.horizon_periods] or [cycle.horizon_periods],
         "histories": HISTORY_CHOICES,
         "window_modes": [{"code": c, "label": l} for c, l in WINDOW_MODES],
+        "aggregates": [{"code": c, "label": l} for c, l in AGGREGATES],
+        # Numaralandirma tek yerde: filtre, tablo ve grafik ayni listeyi kullanir.
+        # source yalnizca ipucu icin; ekranda katman adi gecmez.
+        "models": [
+            {"code": code, "label": MODEL_LABELS[code], "source": _layer_name(db, code)}
+            for code, _chain in MODEL_CHAINS
+        ],
         # Tarih araligi modunun secenekleri: cevrimin takvimindeki tum aylik
         # kovalar. Baslangic ve bitis ayni listeden secilir.
         "periods": [
@@ -456,159 +526,144 @@ def _options(db: Session, cycle: Cycle, principal: Principal) -> dict:
 
 
 def _model_table(
-    db, q, cycle, scope_keys, history, future, month_ids, actual_raw, layer_raw, cache,
+    db, q, cycle, scope_keys, history, future, month_ids, actual_raw, model_raw, layer_raw, cache,
 ) -> dict:
-    """Katman karşılaştırma tablosu.
+    """Model karşılaştırma tablosu: ölçü sütunları.
 
-    Her satır bir tahmin üreticisi. Geçmiş sütunu snapshot'tan gelir, çünkü
-    layer_value geçmiş dönemleri tutmuyor ve zaten doğrusu snapshot'tır:
-    gerçekleşen gelmeden önce donmuş tahmin. Gelecek sütunu seçili versiyonun
-    katman değerinden gelir. MAPE aynı pencere ve aynı kapsamla hesaplanır.
+    Satırlar seçili modeller. Geçmiş sütunu snapshot'tan, gelecek sütunu
+    katman değerinden gelir; ikisi de _effective_model içinde birleştirildi.
+    Toplam/ortalama ayrımı sütun kırılımı değil, tek bir filtre: aggregate.
+    MAPE ve bütçe farkı burada değil, kendi tablosunda.
     """
-    lag = max(1, int(q.lag or DEFAULT_LAG))
     past_ids = {b.id for b in history}
     measure_rows = {m.code: m for m in db.execute(select(Measure)).scalars()}
     measure_codes = [c for c in HEADLINE_MEASURES if c in measure_rows]
-    layer_rows = {
-        row.code: row
-        for row in db.execute(select(Layer).where(Layer.code.in_(TABLE_LAYERS))).scalars()
-    }
 
     past_periods = _period_count(db, cycle, q.grain, history)
     future_periods = _period_count(db, cycle, q.grain, future)
-    show_avg = q.grain != cycle.grain
+    average = q.aggregate == "average"
 
-    def total(values, measure_code):
+    def total(values, measure_code, keep):
         if not values:
             return None
-        scaled = _scale(db, values, measure_code, q.view, q.currency, scope_keys, month_ids, cache)
+        picked = {k: v for k, v in values.items() if (k[1] in past_ids) == keep}
+        if not picked:
+            return None
+        scaled = _scale(db, picked, measure_code, q.view, q.currency, scope_keys, month_ids, cache)
         return sum(scaled.values())
 
     def cell(value, periods):
         if value is None:
-            return {"total": None, "avg": None}
-        return {
-            "total": round(value, 1),
-            "avg": round(value / periods, 1) if show_avg and periods else None,
-        }
+            return None
+        return round(value / periods, 1) if average and periods else round(value, 1)
 
+    # Ölçü üst başlık, altında geçmiş ve gelecek. "Adet geçmiş / Adet gelecek"
+    # diye dört düz sütun, hangi ikisinin aynı ölçüye ait olduğunu göstermiyordu.
     column_groups, columns = [], []
     for code in measure_codes:
-        name = measure_rows[code].name
-        for seg, seg_label, periods in (("past", "geçmiş", past_periods),
-                                        ("future", "gelecek", future_periods)):
-            key = f"{code}_{seg}"
-            column_groups.append({"key": key, "label": f"{name} {seg_label}", "span": 2 if show_avg else 1})
-            columns.append({"key": key, "part": "total", "label": "Toplam" if show_avg else name,
-                            "group": key, "periods": periods})
-            if show_avg:
-                columns.append({"key": key, "part": "avg", "label": "Ortalama",
-                                "group": key, "periods": periods})
-    column_groups.append({"key": "mape", "label": "", "span": 1})
-    columns.append({"key": "mape", "part": "total", "label": "MAPE", "group": "mape", "periods": None})
-    column_groups.append({"key": "budget_gap", "label": "", "span": 1})
-    columns.append({"key": "budget_gap", "part": "total", "label": "Bütçe farkı",
-                    "group": "budget_gap", "periods": None})
+        column_groups.append({"key": code, "label": measure_rows[code].name, "span": 2})
+        for seg, seg_label, periods in (("past", "Geçmiş", past_periods),
+                                        ("future", "Gelecek", future_periods)):
+            columns.append({"key": f"{code}_{seg}", "label": seg_label,
+                            "group": code, "periods": periods})
 
-    # Butce yalnizca bir bolum donemi kapsiyor; karsilastirmayi tum ufka yaymak
-    # modeli "butceyi ikiye katlamis" gibi gosterir. Iki taraf da butcenin
-    # bulundugu donemlerle sinirli. Oran adet uzerinden: butce adet cinsinden
-    # tutuluyor, fiyat carpani iki tarafta da sadelesirdi.
-    budget_future = {k: v for k, v in layer_raw.get("budget", {}).items() if k[1] not in past_ids}
-    budget_ids = {bid for _sk, bid in budget_future}
-    budget_total = sum(budget_future.values())
-
-    def budget_gap(future_values):
-        if not budget_total or not future_values:
-            return None
-        got = sum(v for (_sk, bid), v in future_values.items() if bid in budget_ids)
-        if not got:
-            return None
-        return round((got / budget_total - 1) * 100, 1)
-
-    # Satis ve Planlamaci gibi katkici katmanlari tam bir tahmin degil, yalnizca
-    # dokunulan hucrelerden olusan bir ortu. Toplamlari Istatistiksel'in yanina
-    # ciplak yazmak "Satis 20 bin adet tahmin etti" gibi okunur. Doluluk oranini
-    # satirla birlikte tasiyoruz ki ekran kismi oldugunu soyleyebilsin.
-    expected_future = len(scope_keys) * len(future)
-
-    def row(code, label, provenance, past_values, future_values, mape, note=None, source=None):
+    def row(code, label, provenance, values, past_only=False):
         cells = {}
         for m in measure_codes:
-            cells[f"{m}_past"] = cell(total(past_values, m) if past_values is not None else None, past_periods)
-            cells[f"{m}_future"] = cell(total(future_values, m) if future_values is not None else None,
-                                        future_periods)
-        filled = len(future_values or {})
-        coverage = round(filled / expected_future, 4) if expected_future else None
-        partial = bool(coverage is not None and 0 < coverage < 0.99)
-        return {
-            "code": code, "label": label, "provenance": provenance,
-            "source": source,
-            "cells": cells, "mape": mape, "note": note,
-            # Kismi bir ortuyu butcenin tamamiyla karsilastirmak "butcenin %96
-            # altinda" gibi okunur; dolu olmayan hucreler sifir sayilmis olur.
-            # Karsilastirma anlamsizsa sayi uretmiyoruz.
-            "budget_gap": None if partial else budget_gap(future_values),
-            "future_coverage": coverage,
-            "future_partial": partial,
-        }
+            cells[f"{m}_past"] = cell(total(values, m, True), past_periods)
+            cells[f"{m}_future"] = None if past_only else cell(total(values, m, False), future_periods)
+        return {"code": code, "label": label, "provenance": provenance, "cells": cells}
 
-    # Satirlar "Model 1..N" diye numaralanir; hangi katman oldugu yalnizca
-    # ipucunda durur. Ekranda katman adi gorunmuyor, cunku bu tablo tahmin
-    # ureticilerini karsilastiriyor, katman sozlugunu ogretmiyor.
-    rows = [row("actual", "Gerçekleşen", "actual", actual_raw, None, None)]
-    n = 0
-    for code in TABLE_LAYERS:
-        layer = layer_rows.get(code)
-        if layer is None:
-            continue
-        n += 1
-        snap = acc.snapshot_values(db, code, lag, scope_keys, past_ids)
-        m = acc.metrics_for(db, code, lag, scope_keys, past_ids)
-        future_vals = {k: v for k, v in layer_raw.get(code, {}).items() if k[1] not in past_ids}
-        rows.append(row(
-            code, f"Model {n}", layer.provenance,
-            snap or None, future_vals or None, m["mape"],
-            note=None if m["n"] else "bu pencerede snapshot yok",
-            source=layer.name,
-        ))
+    rows = [row("actual", "Gerçekleşen", "actual", actual_raw, past_only=True)]
+    for code in q.selected_models():
+        rows.append(row(code, MODEL_LABELS[code], _provenance_of(db, code), model_raw.get(code, {})))
 
     return {
         "column_groups": column_groups,
         "columns": columns,
         "rows": rows,
-        "lag": lag,
-        "show_avg": show_avg,
+        "aggregate": q.aggregate,
         "past_periods": past_periods,
         "future_periods": future_periods,
-        "budget_periods": len(budget_ids),
     }
 
 
-def _charts(db, q, target_buckets, series_out, current_index) -> list[dict]:
-    labels = [b.label for b in target_buckets]
-    out: list[dict] = []
+def _layer_row(db, layer_code: str):
+    return db.execute(select(Layer).where(Layer.code == layer_code)).scalar_one_or_none()
 
-    cons, budget = series_out["consensus"], series_out["budget"]
+
+def _provenance_of(db, layer_code: str) -> str:
+    row = _layer_row(db, layer_code)
+    return row.provenance if row else "model"
+
+
+def _layer_name(db, layer_code: str) -> str:
+    row = _layer_row(db, layer_code)
+    return row.name if row else layer_code
+
+
+def _accuracy_table(db, q, scope_keys, past_ids, future_ids, model_raw, layer_raw) -> dict:
+    """Doğruluk ve bütçe farkı; ölçü tablosundan ayrı durur.
+
+    Bütçe ufkun tamamını kapsamadığı için karşılaştırma yalnızca bütçesi olan
+    dönemler üzerinden yapılır; aksi halde model bütçeyi kat kat aşmış görünür.
+    Oran adet üzerinden: bütçe adet cinsinden tutuluyor, fiyat çarpanı iki
+    tarafta da sadeleşirdi.
+    """
+    lag = max(1, int(q.lag or DEFAULT_LAG))
+    wanted = set(future_ids)
+    budget_future = {k: v for k, v in layer_raw.get("budget", {}).items()
+                     if k[1] in wanted and k[1] not in past_ids}
+    budget_ids = {bid for _sk, bid in budget_future}
+    budget_total = sum(budget_future.values())
+
+    rows = []
+    for code in q.selected_models():
+        metrics = acc.metrics_for(db, code, lag, scope_keys, past_ids)
+        values = model_raw.get(code, {})
+        got = sum(v for (_sk, bid), v in values.items() if bid in budget_ids)
+        rows.append({
+            "code": code,
+            "label": MODEL_LABELS[code],
+            "provenance": _provenance_of(db, code),
+            "mape": metrics["mape"],
+            "wmape": metrics["wmape"],
+            "n": metrics["n"],
+            "budget_gap": round((got / budget_total - 1) * 100, 1) if budget_total and got else None,
+        })
+    return {"rows": rows, "lag": lag, "budget_periods": len(budget_ids)}
+
+
+def _charts(db, q, target_buckets, series_out, gap_model, divisor) -> list[dict]:
+    """Bütçe farkı, seçilen tek bir modelin bütçeye göre sapması.
+
+    Model seçimi genel filtreden değil grafiğin kendi seçicisinden gelir;
+    seçenekleri genel filtrede işaretlenmiş modellerdir. Kümülatif çizgi
+    bütçesi olmayan dönemlerde sıfırlanmaz, kaldığı yerden devam eder.
+    """
+    model_series = series_out.get(gap_model, {})
+    budget = series_out["budget"]
     gap_points, cumulative = [], 0.0
-    for b, label in zip(target_buckets, labels):
-        c, g = cons.get(b.id), budget.get(b.id)
+    for b in target_buckets:
+        c, g = model_series.get(b.id), budget.get(b.id)
         if c is None or g is None:
-            gap_points.append({"label": label, "gap": None, "cumulative": None})
+            gap_points.append({"label": b.label, "gap": None, "cumulative": None})
             continue
+        d = divisor(b.id)
+        c, g = c / d, g / d
         cumulative += c - g
         gap_points.append({
-            "label": label,
+            "label": b.label,
             "gap": round(c - g, 1),
             "cumulative": round(cumulative, 1),
             "pct": round((c / g - 1) * 100, 1) if g else None,
         })
 
-    out.append({
+    return [{
         "code": "budget_gap",
         "label": "Bütçe farkı",
-        "note": "Dönem bazında fark ve kümülatif seyir",
         "kind": "bar_line",
+        "model": gap_model,
+        "model_label": MODEL_LABELS.get(gap_model, gap_model),
         "points": gap_points,
-    })
-    return out
+    }]

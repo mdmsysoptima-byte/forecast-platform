@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.git/
+.github/
+data/
+*.log
+*.xlsx
+*.csv
+!configs/**/*.csv
+docs/
+README.md
+run.ps1

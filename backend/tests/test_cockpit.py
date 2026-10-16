@@ -8,11 +8,27 @@ from app.domain.models import Measure, Member, PriceIndex, Series, TimeBucket
 from app.services import accuracy, cycle_svc, measures
 
 
+ALL_MODELS = ["statistical", "sales", "planner", "consensus"]
+
+
 def overview(client, headers, **kw):
-    body = {"horizon_periods": 12, "history_periods": 24, **kw}
+    body = {"horizon_periods": 12, "history_periods": 24, "models": ALL_MODELS, **kw}
     res = client.post("/api/v1/cockpit/overview", headers=headers, json=body)
     assert res.status_code == 200, res.text
     return res.json()
+
+
+def model_points(body, code):
+    """Zaman çizgisindeki bir modelin nokta dizisi."""
+    return next(m["points"] for m in body["timeline"]["models"] if m["code"] == code)
+
+
+def table_row(body, code):
+    return next(r for r in body["table"]["rows"] if r["code"] == code)
+
+
+def accuracy_row(body, code):
+    return next(r for r in body["accuracy"]["rows"] if r["code"] == code)
 
 
 # --------------------------------------------------------------- timeline
@@ -30,21 +46,37 @@ def test_actual_never_leaks_into_the_future(client, planner_headers):
 def test_forecast_lines_cover_the_past_too(client, planner_headers):
     """Ekranın sorusu "geçmişte ne tahmin ettik, ne çıktı"; tahmin çizgileri
     mevcut dönemde başlayamaz. Geçmiş değerler snapshot'tan gelir."""
-    t = overview(client, planner_headers)["timeline"]
-    ci = t["current_index"]
-    for code in ("statistical", "consensus"):
-        s = t["series"][code]
+    body = overview(client, planner_headers)
+    ci = body["timeline"]["current_index"]
+    for code in ALL_MODELS:
+        s = model_points(body, code)
         assert any(v is not None for v in s[:ci]), f"{code} gecmiste bos"
         assert any(v is not None for v in s[ci:]), f"{code} gelecekte bos"
 
 
-def test_actual_and_consensus_meet_without_a_gap(client, planner_headers):
+def test_every_selected_model_is_a_full_curve(client, planner_headers):
+    """Katkıcı katmanları gelecekte seyrek; ham okunsa Model 2 bugünden sonra
+    dibe çökerdi. Zincir boyunca düşülerek hepsi tam bir tahmin olur."""
+    body = overview(client, planner_headers)
+    filled = {m["code"]: sum(1 for v in m["points"] if v is not None)
+              for m in body["timeline"]["models"]}
+    assert set(filled) == set(ALL_MODELS)
+    assert len(set(filled.values())) == 1, f"modeller ayni uzunlukta degil: {filled}"
+
+    # Gelecek toplamlari ayni buyukluk mertebesinde; biri otekinin yuzde 5'i olamaz.
+    totals = [table_row(body, c)["cells"]["units_future"] for c in ALL_MODELS]
+    assert min(totals) > 0.5 * max(totals), f"model toplamlari ayrisiyor: {totals}"
+
+
+def test_models_and_actual_meet_without_a_gap(client, planner_headers):
     """İki çizgi arasında bir dönemlik boşluk kalırsa grafik kopuk görünür."""
-    t = overview(client, planner_headers)["timeline"]
-    actual, consensus = t["series"]["actual"], t["series"]["consensus"]
+    body = overview(client, planner_headers)
+    actual = body["timeline"]["series"]["actual"]
     last_actual = max(i for i, v in enumerate(actual) if v is not None)
-    assert consensus[last_actual] is not None, "devir noktasinda konsensus bos"
-    assert consensus[last_actual + 1] is not None, "devirden sonra konsensus kopuk"
+    for code in ALL_MODELS:
+        s = model_points(body, code)
+        assert s[last_actual] is not None, f"{code} devir noktasinda bos"
+        assert s[last_actual + 1] is not None, f"{code} devirden sonra kopuk"
 
 
 def test_current_bucket_is_flagged(client, planner_headers):
@@ -60,9 +92,8 @@ def test_horizon_selection_changes_forecast_length(client, planner_headers):
     counts = {}
     for horizon in (6, 12, 18):
         body = overview(client, planner_headers, horizon_periods=horizon, history_periods=12)
-        t = body["timeline"]
-        # Konsensus artik gecmisi de kapsiyor; uzunluk yalnizca gelecek kismindan.
-        future = t["series"]["consensus"][t["current_index"]:]
+        # Modeller artik gecmisi de kapsiyor; uzunluk yalnizca gelecek kismindan.
+        future = model_points(body, "consensus")[body["timeline"]["current_index"]:]
         counts[horizon] = sum(1 for v in future if v is not None)
         assert body["meta"]["horizon_periods"] == horizon
     assert counts[6] < counts[12] < counts[18]
@@ -81,16 +112,18 @@ def test_grain_rollup_preserves_the_total(client, planner_headers):
     totals = {}
     for grain in ("month", "quarter", "year"):
         body = overview(client, planner_headers, grain=grain, history_periods=12)
-        totals[grain] = sum(v for v in body["timeline"]["series"]["consensus"] if v is not None)
+        totals[grain] = sum(v for v in model_points(body, "consensus") if v is not None)
     assert totals["quarter"] == pytest.approx(totals["month"], rel=1e-6)
     assert totals["year"] == pytest.approx(totals["month"], rel=1e-6)
 
 
 def test_model_band_wraps_the_statistical_line(client, planner_headers):
-    s = overview(client, planner_headers)["timeline"]["series"]
+    body = overview(client, planner_headers)
+    s = body["timeline"]["series"]
+    stat = model_points(body, "statistical")
     pairs = [
         (lo, mid, hi)
-        for lo, mid, hi in zip(s["lower"], s["statistical"], s["upper"])
+        for lo, mid, hi in zip(s["lower"], stat, s["upper"])
         if lo is not None and mid is not None and hi is not None
     ]
     assert pairs, "model araligi hic uretilmedi"
@@ -98,75 +131,116 @@ def test_model_band_wraps_the_statistical_line(client, planner_headers):
         assert lo <= mid <= hi
 
 
-# --------------------------------------------------- katman karsilastirma
-def test_table_rows_are_actual_plus_numbered_models(client, planner_headers):
+def test_band_disappears_when_its_model_is_not_selected(client, planner_headers):
+    """Belirsizlik bandı modelin ham çıktısına ait; o model seçili değilse band
+    başka bir çizgiyi sarıyormuş gibi görünürdü."""
+    body = overview(client, planner_headers, models=["consensus"])
+    s = body["timeline"]["series"]
+    assert all(v is None for v in s["lower"])
+    assert all(v is None for v in s["upper"])
+
+
+# --------------------------------------------------- model karsilastirma
+def test_table_rows_are_actual_plus_the_selected_models(client, planner_headers):
     body = overview(client, planner_headers)
     assert "kpis" not in body, "kartlar tabloya donustu"
     rows = body["table"]["rows"]
-    assert [r["code"] for r in rows] == ["actual", "statistical", "sales", "planner", "consensus"]
-    # Butce satir degil: snapshot'i yok, MAPE'si hesaplanamaz.
-    # Pazarlama da yok: gelecekte hic degeri olmadigi icin satiri bos kaliyordu.
-    assert {"budget", "marketing"}.isdisjoint(r["code"] for r in rows)
-    # Ekranda katman adi gecmez; satirlar numaralidir, kaynak yalnizca ipucunda.
+    assert [r["code"] for r in rows] == ["actual", *ALL_MODELS]
+    # Ekranda katman adi gecmez; satirlar numaralidir.
     assert [r["label"] for r in rows] == ["Gerçekleşen", "Model 1", "Model 2", "Model 3", "Model 4"]
-    assert rows[0]["source"] is None
-    assert all(r["source"] for r in rows[1:])
+    # MAPE ve butce farki burada degil, kendi tablosunda.
+    assert all("mape" not in r and "budget_gap" not in r for r in rows)
 
 
-def test_actual_row_has_no_future_and_no_error(client, planner_headers):
-    """Gerçekleşenin geleceği yoktur; MAPE'si de kendisiyle karşılaştırma olurdu."""
-    row = next(r for r in overview(client, planner_headers)["table"]["rows"] if r["code"] == "actual")
-    assert row["mape"] is None
-    for key, cell in row["cells"].items():
+def test_measure_columns_are_grouped_into_past_and_future(client, planner_headers):
+    """Ölçü üst başlık, altında geçmiş ve gelecek; dört düz sütun hangi ikisinin
+    aynı ölçüye ait olduğunu göstermiyordu."""
+    t = overview(client, planner_headers)["table"]
+    assert [g["label"] for g in t["column_groups"]] == ["Adet", "Ciro"]
+    assert all(g["span"] == 2 for g in t["column_groups"])
+    assert [c["label"] for c in t["columns"]] == ["Geçmiş", "Gelecek", "Geçmiş", "Gelecek"]
+    # Alt sutunlar ust basliga baglanir, yoksa gruplama hizalanmaz.
+    assert [c["group"] for c in t["columns"]] == ["units", "units", "revenue", "revenue"]
+    assert sum(g["span"] for g in t["column_groups"]) == len(t["columns"])
+
+
+def test_model_selection_drives_table_and_chart_together(client, planner_headers):
+    """Filtre tek bir seçim; tablo ile grafik ayrı şeyler gösteremez."""
+    body = overview(client, planner_headers, models=["statistical", "consensus"])
+    picked = ["statistical", "consensus"]
+    assert body["meta"]["models"] == picked
+    assert [r["code"] for r in body["table"]["rows"]] == ["actual", *picked]
+    assert [m["code"] for m in body["timeline"]["models"]] == picked
+    assert [r["code"] for r in body["accuracy"]["rows"]] == picked
+
+
+def test_empty_model_selection_falls_back(client, planner_headers):
+    """Hiç model seçilmezse ekranda karşılaştıracak bir şey kalmaz."""
+    body = overview(client, planner_headers, models=[])
+    assert body["meta"]["models"], "bos secim bos ekran uretmemeli"
+
+
+def test_actual_row_has_no_future(client, planner_headers):
+    """Gerçekleşenin geleceği yoktur."""
+    row = table_row(overview(client, planner_headers), "actual")
+    for key, value in row["cells"].items():
         if key.endswith("_future"):
-            assert cell["total"] is None, f"{key} dolu gelmemeli"
+            assert value is None, f"{key} dolu gelmemeli"
         else:
-            assert cell["total"] > 0
+            assert value > 0
 
 
-def test_table_columns_split_into_total_and_average_only_above_month(client, planner_headers):
-    monthly = overview(client, planner_headers)["table"]
-    assert monthly["show_avg"] is False
-    assert all(g["span"] == 1 for g in monthly["column_groups"])
-    assert all(c["part"] == "total" for c in monthly["columns"])
+def test_average_divides_the_total_by_the_period_count(client, planner_headers):
+    """Toplam/ortalama bir sütun kırılımı değil, tüm sayfayı süren tek filtre."""
+    total = overview(client, planner_headers, grain="quarter", aggregate="total")
+    avg = overview(client, planner_headers, grain="quarter", aggregate="average")
+    assert total["table"]["aggregate"] == "total"
+    assert avg["table"]["aggregate"] == "average"
+    # Tek deger var, toplam/ortalama diye bolunmus sutun yok.
+    assert all(isinstance(v, (int, float, type(None)))
+               for r in avg["table"]["rows"] for v in r["cells"].values())
 
-    quarterly = overview(client, planner_headers, grain="quarter")["table"]
-    assert quarterly["show_avg"] is True
-    # MAPE ve bütçe farkı tek değer; toplam/ortalama diye bölünmezler.
-    measure_groups = [g for g in quarterly["column_groups"] if g["key"] not in ("mape", "budget_gap")]
-    assert measure_groups and all(g["span"] == 2 for g in measure_groups)
+    t = table_row(total, "consensus")["cells"]["units_future"]
+    a = table_row(avg, "consensus")["cells"]["units_future"]
+    assert a == pytest.approx(t / total["table"]["future_periods"], rel=0.01)
 
-    # Ortalama, toplamin donem sayisina bolumudur.
-    row = next(r for r in quarterly["rows"] if r["code"] == "consensus")
-    cell = row["cells"]["units_future"]
-    assert cell["avg"] == pytest.approx(cell["total"] / quarterly["future_periods"], rel=0.01)
+
+def test_average_also_drives_the_chart(client, planner_headers):
+    """Ekranın tamamı aynı filtreye uyar: grafik de ortalamaya geçer."""
+    total = overview(client, planner_headers, grain="quarter", aggregate="total")
+    avg = overview(client, planner_headers, grain="quarter", aggregate="average")
+    t = [v for v in model_points(total, "consensus") if v is not None]
+    a = [v for v in model_points(avg, "consensus") if v is not None]
+    assert sum(a) < sum(t), "grafik ortalamaya gecmemis"
+    # Ceyrekte her kova uc ay tasir.
+    assert sum(t) / sum(a) == pytest.approx(3.0, rel=0.1)
 
 
 def test_quarter_total_equals_month_total(client, planner_headers):
     """Kova degismesi toplami degistirmez, yalnizca nasil bolundugunu degistirir."""
-    m = next(r for r in overview(client, planner_headers)["table"]["rows"] if r["code"] == "consensus")
-    q = next(r for r in overview(client, planner_headers, grain="quarter")["table"]["rows"]
-             if r["code"] == "consensus")
-    assert q["cells"]["units_future"]["total"] == pytest.approx(
-        m["cells"]["units_future"]["total"], rel=0.01)
+    m = table_row(overview(client, planner_headers), "consensus")
+    q = table_row(overview(client, planner_headers, grain="quarter"), "consensus")
+    assert q["cells"]["units_future"] == pytest.approx(m["cells"]["units_future"], rel=0.01)
 
 
-def test_table_mape_matches_the_accuracy_endpoint(client, planner_headers):
+# ------------------------------------------------ dogruluk ve butce farki
+def test_accuracy_table_is_separate_from_the_measure_table(client, planner_headers):
+    body = overview(client, planner_headers)
+    a = body["accuracy"]
+    assert [r["code"] for r in a["rows"]] == ALL_MODELS
+    assert all(r["mape"] is not None for r in a["rows"])
+    # Gerceklesen burada yok: kendisiyle karsilastirma olurdu.
+    assert "actual" not in {r["code"] for r in a["rows"]}
+    assert a["lag"] == 1 and a["budget_periods"] > 0
+
+
+def test_accuracy_mape_matches_the_analysis_endpoint(client, planner_headers):
     """Tablodaki MAPE ile Analiz ekranindaki ayni sayi olmali."""
-    row = next(r for r in overview(client, planner_headers)["table"]["rows"] if r["code"] == "consensus")
+    row = accuracy_row(overview(client, planner_headers), "consensus")
     reported = client.get(
         "/api/v1/analysis/accuracy?layer=consensus&lag=1", headers=planner_headers
     ).json()["summary_metrics"]["mape"]
     assert row["mape"] == pytest.approx(reported, rel=0.02)
-
-
-def test_partial_layers_are_flagged(client, planner_headers):
-    """Katkici katmanlari tam tahmin degil; toplamlari ciplak okunmamali."""
-    rows = {r["code"]: r for r in overview(client, planner_headers)["table"]["rows"]}
-    assert rows["consensus"]["future_partial"] is False
-    assert rows["consensus"]["future_coverage"] == pytest.approx(1.0, abs=0.02)
-    assert rows["sales"]["future_partial"] is True
-    assert rows["sales"]["future_coverage"] < 0.5
 
 
 def test_only_the_budget_gap_chart_remains(client, planner_headers):
@@ -195,31 +269,41 @@ def test_budget_gap_chart_spans_the_whole_window(client, planner_headers):
     assert any(p["gap"] is not None for p in chart["points"])
 
 
-def test_table_has_a_budget_gap_column(client, planner_headers):
-    t = overview(client, planner_headers)["table"]
-    assert [c["key"] for c in t["columns"]][-2:] == ["mape", "budget_gap"]
-    rows = {r["code"]: r for r in t["rows"]}
-    # Gerçekleşenin geleceği yok, karşılaştıracak bir tahmin de yok.
-    assert rows["actual"]["budget_gap"] is None
-    # Tam katmanlar karşılaştırılır.
-    assert rows["consensus"]["budget_gap"] is not None
-    assert rows["statistical"]["budget_gap"] is not None
-    # Kısmi örtüler karşılaştırılmaz: dolu olmayan hücreler sıfır sayılır ve
-    # satır "bütçenin çok altında" gibi okunurdu.
-    for r in t["rows"]:
-        if r["future_partial"]:
-            assert r["budget_gap"] is None, f"{r['label']} kismi ama butce farki uretilmis"
+def test_every_model_gets_a_budget_gap(client, planner_headers):
+    body = overview(client, planner_headers)
+    for r in body["accuracy"]["rows"]:
+        assert r["budget_gap"] is not None, f"{r['label']} butce farki uretmedi"
 
 
-def test_budget_gap_column_uses_only_the_budgeted_periods(client, planner_headers):
+def test_budget_gap_uses_only_the_budgeted_periods(client, planner_headers):
     """Bütçe ufkun tamamını kapsamıyor; karşılaştırmayı tüm ufka yaymak modeli
     bütçenin çok üstünde gösterirdi."""
-    t = overview(client, planner_headers)["table"]
-    assert 0 < t["budget_periods"] <= t["future_periods"]
-    consensus = next(r for r in t["rows"] if r["code"] == "consensus")
+    body = overview(client, planner_headers)
+    a = body["accuracy"]
+    assert 0 < a["budget_periods"] <= body["table"]["future_periods"]
     # Konsensus butceye yakin seyreder; ufkun tamami kullanilsaydi yuzde 40'i
     # asardi (butce 12 donem, ufuk 18).
-    assert abs(consensus["budget_gap"]) < 25
+    assert abs(accuracy_row(body, "consensus")["budget_gap"]) < 25
+
+
+def test_gap_chart_follows_its_own_model_picker(client, planner_headers):
+    """Bütçe farkı tek bir modele bakar; seçenekleri üst filtredekiler."""
+    body = overview(client, planner_headers, gap_model="statistical")
+    chart = next(c for c in body["charts"] if c["code"] == "budget_gap")
+    assert body["meta"]["gap_model"] == "statistical"
+    assert chart["model"] == "statistical"
+    assert chart["model_label"] == "Model 1"
+
+    other = overview(client, planner_headers, gap_model="consensus")
+    mine = [p["gap"] for p in chart["points"] if p["gap"] is not None]
+    theirs = [p["gap"] for p in next(c for c in other["charts"])["points"] if p["gap"] is not None]
+    assert mine != theirs, "model secimi butce farkini degistirmiyor"
+
+
+def test_gap_model_must_be_among_the_selected_models(client, planner_headers):
+    """Üst filtreden çıkarılan bir model bütçe farkında asılı kalamaz."""
+    body = overview(client, planner_headers, models=["statistical"], gap_model="consensus")
+    assert body["meta"]["gap_model"] == "statistical"
 
 
 def test_budget_gap_reaches_into_the_past(client, planner_headers):
@@ -274,10 +358,9 @@ def test_both_window_modes_describe_the_same_window(client, planner_headers):
     span = by_count["meta"]
     by_range = overview(client, planner_headers, window_mode="range",
                         start_label=span["start_label"], end_label=span["end_label"])
-    a = next(r for r in by_count["table"]["rows"] if r["code"] == "consensus")
-    b = next(r for r in by_range["table"]["rows"] if r["code"] == "consensus")
-    assert a["cells"]["units_future"]["total"] == pytest.approx(
-        b["cells"]["units_future"]["total"], rel=0.001)
+    a = table_row(by_count, "consensus")["cells"]["units_future"]
+    b = table_row(by_range, "consensus")["cells"]["units_future"]
+    assert a == pytest.approx(b, rel=0.001)
 
 
 # ------------------------------------------------------------------- kapsam
@@ -291,9 +374,9 @@ def test_scope_narrows_the_error_metric_too(client, planner_headers):
                       scope={dim["dimension"]: {"nodes": [node["node_id"]]}})
 
     assert narrow["meta"]["series_in_scope"] < full["meta"]["series_in_scope"]
-    a = next(r for r in full["table"]["rows"] if r["code"] == "statistical")
-    b = next(r for r in narrow["table"]["rows"] if r["code"] == "statistical")
-    assert b["cells"]["units_future"]["total"] < a["cells"]["units_future"]["total"]
+    assert (table_row(narrow, "statistical")["cells"]["units_future"]
+            < table_row(full, "statistical")["cells"]["units_future"])
+    a, b = accuracy_row(full, "statistical"), accuracy_row(narrow, "statistical")
     assert b["mape"] is not None
     assert b["mape"] != a["mape"], "MAPE kapsami takip etmiyor"
 
@@ -305,8 +388,8 @@ def test_scope_narrows_the_series_set(client, planner_headers):
     node = scopes["nodes"][0]["node_id"]
     narrowed = overview(client, planner_headers, scope={scopes["dimension"]: {"nodes": [node]}})
     assert narrowed["meta"]["series_in_scope"] < full["meta"]["series_in_scope"]
-    full_total = sum(v for v in full["timeline"]["series"]["consensus"] if v is not None)
-    part_total = sum(v for v in narrowed["timeline"]["series"]["consensus"] if v is not None)
+    full_total = sum(v for v in model_points(full, "consensus") if v is not None)
+    part_total = sum(v for v in model_points(narrowed, "consensus") if v is not None)
     assert 0 < part_total < full_total
 
 
@@ -344,13 +427,13 @@ def test_revenue_is_units_times_price(db):
 def test_revenue_tracks_volume_and_inflation(client, planner_headers):
     units = overview(client, planner_headers, measure="units")
     revenue = overview(client, planner_headers, measure="revenue")
-    u = sum(v for v in units["timeline"]["series"]["consensus"] if v is not None)
-    r = sum(v for v in revenue["timeline"]["series"]["consensus"] if v is not None)
+    u = sum(v for v in model_points(units, "consensus") if v is not None)
+    r = sum(v for v in model_points(revenue, "consensus") if v is not None)
     assert r > u, "ciro hacimden buyuk olmali"
     assert revenue["meta"]["unit_type"] == "value"
     # Real TRY deflates by the price index, so it must be below nominal.
     real = overview(client, planner_headers, measure="revenue", view="real")
-    r_real = sum(v for v in real["timeline"]["series"]["consensus"] if v is not None)
+    r_real = sum(v for v in model_points(real, "consensus") if v is not None)
     assert 0 < r_real < r
 
 

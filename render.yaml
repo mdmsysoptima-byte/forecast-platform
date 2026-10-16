@@ -1,0 +1,37 @@
+# Render blueprint. Depoyu bagladiginizda Render bu dosyayi okur ve servisi
+# kendisi kurar; arayuzden tek tek ayar girmek gerekmez.
+#
+# Kalici disk ucretli plan ister. Ucretsiz planda disk yok: her yeniden
+# baslatmada veritabani sifirlanir ve AUTO_SEED demo verisini yeniden kurar.
+# Demo icin dogru davranis budur. Gercek veriyle calisacaksaniz asagidaki disk
+# blogunu acin ve plani yukseltin.
+
+services:
+  - type: web
+    name: forecast-platform
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: frankfurt
+    healthCheckPath: /api/v1/health
+    envVars:
+      # Oturum imzasi. Render her kurulumda rastgele uretir; asla depoya yazilmaz.
+      - key: JWT_SECRET
+        generateValue: true
+      # Bos veritabaniyla acilan sunucu demo verisini kendisi kursun.
+      - key: AUTO_SEED
+        value: "1"
+      - key: SECTOR
+        value: demo
+      # Demo kullanicilarinin sifresi. Acik bir adreste yayinliyorsaniz
+      # degistirin: bu sifreyle herkes admin olarak girebilir.
+      - key: DEMO_PASSWORD
+        sync: false
+      - key: DATA_DIR
+        value: /data
+
+    # Kalici disk (ucretli plan):
+    # disk:
+    #   name: forecast-data
+    #   mountPath: /data
+    #   sizeGB: 1

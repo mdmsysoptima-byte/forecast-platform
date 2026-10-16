@@ -49,14 +49,14 @@ satırlarını gösterir ve yalnızca satış katmanı düzenlenebilir.
 
 ## 2. Beş dakikada tur
 
-1. **Kokpit**: tek filtre şeridi — pencere (dönem sayısı ya da tarih aralığı),
-   başlangıç, bitiş, model, kapsam, alt kapsam, ölçü, kova. Ortadaki büyük grafik
-   **agrege konsensüs tahminidir**: solda gerçekleşen, sağda tahmin, aralarında
-   "tahmin başlangıcı" çizgisi, modelin belirsizlik bandı ve referans olarak bütçe ile
-   geçen yıl. Altında **model karşılaştırma tablosu**: her satır bir tahmin üreticisi
-   (gerçekleşen, istatistiksel, satış, pazarlama, planlamacı, konsensüs), sütunlar
-   adet ve ciro için geçmiş/gelecek ile MAPE. En altta bütçe farkı. Grafiğin üzerine
-   gelince o dönemde değeri olan her seri tek ipucunda listelenir.
+1. **Kokpit**: dört çerçeveli filtre kuşağı — Dönem (dönem sayısı ya da tarih aralığı),
+   Kapsam (boyut + alt kapsam), Model (çoklu seçim), Gösterim (ölçü, kova, toplam/ortalama).
+   **Model karşılaştırma** kartında grafik ve tablo birlikte: seçili modellerin her biri
+   bir çizgi ve bir satır, yanlarında sabit referanslar (gerçekleşen, bütçe, geçen yıl)
+   ve modelin belirsizlik bandı; dikey kesikli çizgi **bugünü** gösterir. Tablo adet ve
+   ciro için geçmiş/gelecek taşır. Altında **doğruluk ve bütçe farkı** tablosu, en altta
+   kendi model seçicisi olan **bütçe farkı** grafiği. Grafiğin üzerine gelince o dönemde
+   değeri olan her seri tek ipucunda listelenir.
 2. **Planlama > Tahmin grid'i**: soldan ağaçtan kapsam seçin, üst şeritten seviye ve kovayı
    değiştirin. Bir satırı açınca katman satırları gelir. Düzenlenebilir bir hücreye çift
    tıklayın, değeri yazın, gerekçe penceresi açılır. Üst seviyeden girilen değer alt
@@ -88,7 +88,7 @@ forecast-platform/
     api/routers/       auth, meta, planning, scenarios, analysis, reports, admin, assistant
     assistant/         araç kataloğu ve sistem promptu (bölüm 16, adım 8)
     demo/              sentetik veri üretici ve yükleyici
-  backend/tests/       77 test
+  backend/tests/       100 test
   frontend/            derleme adımı olmayan tek sayfa uygulaması
     static/vendor/     Metis teması (CSS, fontlar), Bootstrap ve ApexCharts
     static/js/         api, ui bileşenleri, charts (ApexCharts sarmalayıcıları), views/
@@ -237,7 +237,7 @@ karşılığı:
 | 7 | Excel'den geri yükleme fark listesi üretir ve onayla uygulanır; pharma.yaml ile yeni kurulum kod değişikliği olmadan ayağa kalkar | `test_api_and_export.py` |
 | Genel | Tüm uç noktalar OpenAPI'de belgeli ve yetki kontrollü; audit log her yazma işlemini kaydeder | `test_api_and_export.py`, `test_governance.py` |
 | Kokpit | Geçmişe tahmin, geleceğe gerçekleşen sızmaz; iki pencere modu aynı aralığı aynı sayıyla anlatır; çeyrek ve yıl toplamı aylık toplama eşittir; model bandı istatistiksel çizgiyi sarar; ciro = adet x fiyat; satış katkıcısı yalnızca kendi kapsamını görür | `test_cockpit.py` |
-| Kokpit tablosu | Gerçekleşen satırının geleceği ve MAPE'si boştur; tablodaki MAPE ile Analiz ekranındaki aynı sayıdır; kapsam daralınca MAPE de daralır; kısmi katmanlar işaretlenir | `test_cockpit.py` |
+| Kokpit tablosu | Gerçekleşenin geleceği boştur; MAPE ile Analiz ekranındaki aynı sayıdır; kapsam daralınca MAPE de daralır; model seçimi tablo, grafik ve doğruluk tablosunu birlikte sürer; seçili olmayan modelin bandı çizilmez; ortalama modu toplamı dönem sayısına böler ve grafiğe de uygular | `test_cockpit.py` |
 
 Demo ortamında ölçülen değerler: 200 seri çalıştırma 1,6 ile 2,5 saniye; temel seviye
 grid sorgusu (200 satır x 30 dönem) 170 ms civarı; demo yüklemesi uçtan uca 8 saniye.
@@ -286,50 +286,57 @@ uyarınca alınan kararlar ve bu sürümde bilinçli olarak farklı yapılan nok
    koyduğu maddeler kendi ekranlarında yaşıyor: uyarılar Planlama > İstisnalar,
    çalıştırmalar Senaryo > Çalıştırma geçmişi, onay izi Versiyon, lag ayrıntısı ve
    FVA merdiveni Analiz. Kokpit yalnızca tahmin ekranıdır.
-9. **Kokpit tablosunun satırı katmandır, model değil.** `snapshot_value` anahtarı
-   `(çevrim, katman, seri, dönem)`; içinde model ya da versiyon yok. Aynı çevrimde
-   iki model çalışırsa ikisi de `statistical` katmanına yazar ve birbirinin üzerine
-   biner. Model bazında MAPE istenirse bu tabloya model sütunu eklemek ve birincil
-   anahtarı değiştirmek gerekir; geçmiş veri de ancak o günden sonra birikmeye başlar.
-   Katman bazında ölçüm bugün çalışıyor ve 12 çevrimlik geçmişi var.
-10. **Geçmiş sütunu snapshot'tan gelir.** `layer_value` tahmin katmanları için geçmiş
+9. **Kokpitteki "model" bir katmandır, bir senaryo çalıştırması değil.**
+   `snapshot_value` anahtarı `(çevrim, katman, seri, dönem)`; içinde versiyon yok.
+   Aynı çevrimde iki senaryo çalışırsa ikisi de `statistical` katmanına yazar ve
+   birbirinin üzerine biner, dolayısıyla versiyon bazında MAPE hesaplanamaz. Kokpit
+   bu yüzden katmanları karşılaştırır: Model 1 modelin ham çıktısı, Model 4 uzlaşılan
+   sayı. Versiyon karşılaştırması Versiyon ekranında yaşar; kokpit hep aktif
+   konsensüs versiyonunu okur.
+10. **Modeller zincir boyunca düşer.** Katkıcı katmanları (satış, planlamacı)
+   gelecekte yalnızca dokunulan hücreleri taşır; ham okunursa toplamları
+   istatistikselin yüzde üçü kadar çıkar ve model çökmüş gibi görünür. Her model
+   "kendi değeri, yoksa bir altındaki" diye okunur — konsensüs kuralının
+   (`planner > sales > statistical`) mantığı budur ve geçmiş snapshot'lar da böyle
+   üretilmiştir. Böylece dört model de tam bir tahmin eğrisi olur.
+11. **Geçmiş sütunu snapshot'tan gelir.** `layer_value` tahmin katmanları için geçmiş
    dönem tutmuyor; zaten doğrusu da snapshot'tır: gerçekleşen gelmeden önce donmuş
    tahmin. Snapshot penceresi 12 dönem olduğundan daha geriye gidildiğinde model
    satırlarının geçmişi boşalır, gerçekleşen satırı dolu kalır; boş hücre sıfır değil
    tire gösterir.
-11. **polars yerine pandas.** Model sözleşmesindeki kolon adları spesifikasyondakiyle
+12. **polars yerine pandas.** Model sözleşmesindeki kolon adları spesifikasyondakiyle
    birebir aynıdır.
-12. **Alembic migrasyonu yerine `create_all`.** Tek kurulumluk demo için yeterli; üretim
+13. **Alembic migrasyonu yerine `create_all`.** Tek kurulumluk demo için yeterli; üretim
    öncesi ilk migrasyon bu şemadan üretilmelidir.
 
 **Ürün**
 
-13. **Doldurma tutamacı yerine aralık seçimi.** Hücreye tıklayıp `Shift` ile aralık seçilir,
+14. **Doldurma tutamacı yerine aralık seçimi.** Hücreye tıklayıp `Shift` ile aralık seçilir,
    "Seçili aralığı düzenle" ile yüzde veya mutlak değer uygulanır, "Kopyala" seçimi panoya
    sekme ayraçlı yazar. Sürükleyerek doldurma uygulanmadı.
-14. **Zamanlanmış raporlar ve zamanlanmış çalıştırma** kayıt olarak tutulur; cron
+15. **Zamanlanmış raporlar ve zamanlanmış çalıştırma** kayıt olarak tutulur; cron
    tetikleyicisi ve e-posta gönderimi bağlanmadı (TODO).
-15. **Parquet çıktısı** `pyarrow` kuruluysa çalışır; kurulu değilse anlamlı hata döner.
-16. **Asistan katmanı (bölüm 16, adım 8)** arayüz olarak hazır: araç kataloğu rol ve
+16. **Parquet çıktısı** `pyarrow` kuruluysa çalışır; kurulu değilse anlamlı hata döner.
+17. **Asistan katmanı (bölüm 16, adım 8)** arayüz olarak hazır: araç kataloğu rol ve
     kapsama göre süzülür, sistem promptu sektör konfigürasyonundan üretilir, onay kuralları
     tanımlıdır. Claude API tool use döngüsü `ANTHROPIC_API_KEY` gerektirdiği için
     bağlanmadı; `/api/v1/assistant/chat` ne yapacağını söyler, sayı üretmez.
-17. **Entra ID SSO** kapsam dışı; kimlik JWT ile çalışır.
-18. **`user` tablosu `app_user` olarak adlandırıldı**, çünkü `user` PostgreSQL'de ayrılmış
+18. **Entra ID SSO** kapsam dışı; kimlik JWT ile çalışır.
+19. **`user` tablosu `app_user` olarak adlandırıldı**, çünkü `user` PostgreSQL'de ayrılmış
     sözcüktür.
-19. **Demo doğruluk ve FVA verisi** 12 kapanmış çevrim ve bunların snapshot'ları üretilerek
+20. **Demo doğruluk ve FVA verisi** 12 kapanmış çevrim ve bunların snapshot'ları üretilerek
     oluşturulur. Böylece lag bazlı doğruluk eğrisi ve FVA merdiveni gerçek satırlardan
     hesaplanır, sahte sayı gösterilmez.
-20. **FVA'nın kullanıcı ve gerekçe kırılımı** yalnızca gerçekleşenin geldiği dönemler için
+21. **FVA'nın kullanıcı ve gerekçe kırılımı** yalnızca gerçekleşenin geldiği dönemler için
     doludur. Demo verisinde override'lar gelecek dönemlerde olduğu için bu tablo boştur;
     bu doğru davranıştır, geleceğin override'ı henüz ölçülemez.
 
 **Ortam**
 
-21. Bu makinede `PYTHONPATH` kullanıcı seviyesinde Python 3.9 `site-packages` dizinine
+22. Bu makinede `PYTHONPATH` kullanıcı seviyesinde Python 3.9 `site-packages` dizinine
     işaret ediyor ve sanal ortama sızıyor. `run.ps1` bu değişkeni temizler ve
     `PYTHONNOUSERSITE=1` ayarlar. Betik dışında elle çalıştırırken aynısını yapın.
-22. Temayı yeniden derlemek gerekirse Node 20, 22 veya 24 ve ağ erişimi gerekir.
+23. Temayı yeniden derlemek gerekirse Node 20, 22 veya 24 ve ağ erişimi gerekir.
     Uygulamayı çalıştırmak için gerekmez; derlenmiş varlıklar depoda duruyor.
 
 ---
@@ -348,10 +355,38 @@ Gizli bilgiler ortam değişkeninde tutulur, repoda kimlik bilgisi yoktur.
 | `JWT_TTL_MINUTES` | `720` | Oturum süresi |
 | `DRAFT_TTL_DAYS` | `7` | Taslak versiyonların ömrü |
 | `DEMO_PASSWORD` | `demo` | Demo kullanıcı şifresi |
+| `DATA_DIR` | `./data` | Veritabanı dosyalarının dizini; sunucuda kalıcı diske bağlanır |
+| `AUTO_SEED` | `0` | `1` ise boş veritabanıyla açılan sunucu demo verisini kendisi kurar |
 
 ---
 
-## 9. Tasarım notu
+## 9. Sunucuya kurulum
+
+Uygulama Python çalıştıran herhangi bir yere kurulabilir. GitHub Pages **olmaz**:
+Pages yalnızca dosya sunar, bu uygulamanın her ekranı `/api/v1/...` çağırır.
+
+```bash
+docker build -t forecast-platform .
+docker run -p 8000:8000 -e AUTO_SEED=1 -e JWT_SECRET=... forecast-platform
+```
+
+`render.yaml` deposu bağladığınızda Render'ın servisi kendi kurması içindir;
+`JWT_SECRET` her kurulumda rastgele üretilir ve depoya yazılmaz.
+
+**Kalıcılık.** Ücretsiz planlarda disk kalıcı değildir: her yeniden başlatmada
+veritabanı sıfırlanır ve `AUTO_SEED` demo verisini yeniden kurar (yaklaşık
+8 saniye). Demo için doğru davranış budur. Gerçek veriyle çalışacaksanız
+`render.yaml` içindeki disk bloğunu açın ve `DATA_DIR` oraya baksın.
+
+**Güvenlik.** Demo kullanıcıları sabit bir şifre paylaşır ve biri admin'dir.
+Açık bir adreste yayınlıyorsanız `DEMO_PASSWORD`'ü mutlaka değiştirin; aksi
+halde adresi bilen herkes yönetici olarak girip veriyi değiştirebilir. Gerçek
+kullanım için kimlik doğrulamanın kurum sağlayıcısına bağlanması gerekir
+(bölüm 7, Entra ID maddesi).
+
+---
+
+## 10. Tasarım notu
 
 Görsel dil Metis temasından gelir: gölgesiz kartlar, yapıyı taşıyan 1 piksel kenarlıklar,
 nötr Zinc rampası ve tek aksan rengi. Aksan bir etkileşim sinyalidir, süs değil; birincil

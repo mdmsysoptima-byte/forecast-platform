@@ -132,58 +132,66 @@ export function refreshTheme() {
  * The cockpit hero: realised history and forecast in one timeline, split by a
  * vertical rule at the current period, with the model interval as a band.
  */
+/* Model rengi koda bagli, secime degil: Model 2'yi tek basina secince de ayni
+   turuncu kalir. Yedi cizgi yan yana durabiliyor, hepsi ayri bir aileden. */
+const MODEL_COLORS = {
+  statistical: ["#2563eb", "#60a5fa"],
+  sales: ["#ea580c", "#fb923c"],
+  planner: ["#7c3aed", "#a78bfa"],
+  consensus: ["#18181b", "#f4f4f5"],
+};
+const REFERENCE_COLORS = {
+  "Bütçe": ["#71717a", "#a1a1aa"],
+  "Geçen yıl": ["#db2777", "#f9a8d4"],
+};
+const pick = (pair, fallback) => (pair ? pair[isDark() ? 1 : 0] : fallback);
+
+/** Tablo satır noktaları grafikle aynı rengi kullansın diye dışarı açılır. */
+export const MODEL_COLOR = (code) => pick(MODEL_COLORS[code], null);
+
 export function forecastChart(el, {
-  labels, actual, consensus, statistical, budget, lastYear, lower, upper,
+  labels, models = [], actual, budget, lastYear, lower, upper,
   currentLabel, height = 340, unit = "", showBand = true, legendHost = null,
 }) {
-  const series = [];
-  if (showBand && lower && upper && lower.some((v) => v !== null)) {
-    series.push({
-      name: "Model aralığı",
-      type: "rangeArea",
-      data: labels.map((x, i) => ({ x, y: [lower[i], upper[i]] })),
-    });
-  }
-  // Gerçekleşen son geçmiş dönemde biter, konsensüs mevcut dönemde başlardı;
-  // aradaki bir dönemlik boşluk grafiği kopuk gösteriyordu. Gerçekleşenin son
-  // noktasını konsensüse de yazıp iki çizgiyi birleştiriyoruz.
-  const bridged = [...consensus];
-  const lastActual = actual.reduce((acc, v, i) => (v !== null && v !== undefined ? i : acc), -1);
-  if (lastActual >= 0 && (bridged[lastActual] === null || bridged[lastActual] === undefined)) {
-    bridged[lastActual] = actual[lastActual];
-  }
+  const point = (arr) => labels.map((x, i) => ({ x, y: arr ? arr[i] : null }));
+  const lastActual = (actual || []).reduce(
+    (acc, v, i) => (v !== null && v !== undefined ? i : acc), -1,
+  );
 
-  // Çizim sırası arkadan öne. Geçmişte konsensüs gerçekleşene çok yakın
-  // seyrediyor; gerçekleşen en sona yazılmazsa altta kalıp kayboluyor.
+  const series = [];
+  const meta = [];
+  const add = (name, data, color, dash, width, type = "line") => {
+    series.push({ name, type, data });
+    meta.push({ name, color, dash, width, band: type === "rangeArea" });
+  };
+
+  // Çizim sırası arkadan öne: referanslar, sonra modeller, en üstte
+  // gerçekleşen. Geçmişte modeller gerçekleşene çok yakın seyrediyor; en sona
+  // yazılmazsa altta kalıp kayboluyor.
+  if (showBand && lower && upper && lower.some((v) => v !== null)) {
+    add("Model aralığı", labels.map((x, i) => ({ x, y: [lower[i], upper[i]] })),
+      pick(MODEL_COLORS.statistical), 0, 0, "rangeArea");
+  }
   if (budget && budget.some((v) => v !== null)) {
-    series.push({ name: "Bütçe", type: "line", data: labels.map((x, i) => ({ x, y: budget[i] })) });
+    add("Bütçe", point(budget), pick(REFERENCE_COLORS["Bütçe"]), 6, 1.75);
   }
   if (lastYear && lastYear.some((v) => v !== null)) {
-    series.push({ name: "Geçen yıl", type: "line", data: labels.map((x, i) => ({ x, y: lastYear[i] })) });
+    add("Geçen yıl", point(lastYear), pick(REFERENCE_COLORS["Geçen yıl"]), 6, 1.75);
   }
-  if (statistical && statistical.some((v) => v !== null)) {
-    series.push({ name: "İstatistiksel", type: "line", data: labels.map((x, i) => ({ x, y: statistical[i] })) });
+  for (const m of models) {
+    // Gerçekleşenin son noktası modele de yazılır, yoksa iki çizgi arasında
+    // bir dönemlik boşluk kalıyor ve seri kopuk görünüyor.
+    const pts = [...(m.points || [])];
+    if (lastActual >= 0 && (pts[lastActual] === null || pts[lastActual] === undefined)) {
+      pts[lastActual] = actual[lastActual];
+    }
+    add(m.label, point(pts), pick(MODEL_COLORS[m.code], categorical(1)[0]), 0, 2);
   }
-  series.push({ name: "Konsensüs", type: "line", data: labels.map((x, i) => ({ x, y: bridged[i] })) });
-  series.push({ name: "Gerçekleşen", type: "line", data: labels.map((x, i) => ({ x, y: actual[i] })) });
+  add("Gerçekleşen", point(actual), PROVENANCE.actual(), 0, 3);
 
-  // Alti cizgi yan yana duruyor; birbirine yakin maviler ayirt edilemiyordu.
-  // Her seri ayri bir aileden: teal, siyah, mavi, gri, fusya.
-  const colors = series.map((s) => {
-    if (s.name === "Model aralığı") return isDark() ? "#60a5fa" : "#3b82f6";
-    if (s.name === "İstatistiksel") return isDark() ? "#60a5fa" : "#2563eb";
-    if (s.name === "Gerçekleşen") return PROVENANCE.actual();
-    if (s.name === "Konsensüs") return isDark() ? "#f4f4f5" : "#18181b";
-    if (s.name === "Bütçe") return PROVENANCE.budget();
-    return isDark() ? "#f0abfc" : "#c026d3";  // geçen yıl
-  });
-  const dash = series.map((s) => (s.name === "Bütçe" || s.name === "Geçen yıl" ? 6 : 0));
-  const widths = series.map((s) => {
-    if (s.name === "Model aralığı") return 0;
-    if (s.name === "Gerçekleşen") return 3;
-    if (s.name === "Konsensüs") return 2.25;
-    return 1.75;
-  });
+  const colors = meta.map((m) => m.color);
+  const dash = meta.map((m) => m.dash);
+  const widths = meta.map((m) => m.width);
 
   // ApexCharts göstergesi her seriyi dolu bir nokta olarak çiziyor; kesikli mi
   // düz mü olduğu görünmüyordu. Göstergeyi kendimiz çiziyoruz: çizgi biçimi
@@ -219,7 +227,7 @@ export function forecastChart(el, {
         borderColor: axisInk(),
         strokeDashArray: 4,
         label: {
-          text: "tahmin başlangıcı",
+          text: "bugün",
           position: "top",
           orientation: "horizontal",
           style: { fontSize: "10px", color: axisInk(), background: surfacePanel() },
@@ -241,29 +249,29 @@ export function forecastChart(el, {
   });
 
   if (legendHost) {
-    buildLegend(legendHost, chart, series.map((s, i) => ({
-      name: s.name,
-      color: colors[i],
-      dashed: dash[i] > 0,
-      band: s.type === "rangeArea",
+    buildLegend(legendHost, chart, meta.map((m) => ({
+      name: m.name, color: m.color, dashed: m.dash > 0, band: m.band,
     })));
   }
   return chart;
 }
 
-/* Çizim sırası arkadan öne, okuma sırası ise önemden önemsize. İkisi aynı
-   olmak zorunda değil; gösterge kendi sırasını kullanır. */
-const LEGEND_ORDER = [
-  "Gerçekleşen", "Konsensüs", "İstatistiksel", "Model aralığı", "Bütçe", "Geçen yıl",
-];
+/* Çizim sırası arkadan öne, okuma sırası ise önemden önemsize. Modeller
+   aralarındaki sırayı korur; gerçekleşen başta, referanslar sonda. */
+function legendRank(name) {
+  if (name === "Gerçekleşen") return 0;
+  if (name === "Model aralığı") return 90;
+  if (name === "Bütçe") return 91;
+  if (name === "Geçen yıl") return 92;
+  const n = /^Model (\d+)$/.exec(name);
+  return n ? Number(n[1]) : 50;
+}
 
 /** Çizgi biçimini de gösteren gösterge. Tıklamak seriyi gizler. */
 function buildLegend(host, chart, entries) {
   host.textContent = "";
   host.className = "chart-legend";
-  const ranked = [...entries].sort(
-    (a, b) => (LEGEND_ORDER.indexOf(a.name) + 1 || 99) - (LEGEND_ORDER.indexOf(b.name) + 1 || 99),
-  );
+  const ranked = [...entries].sort((a, b) => legendRank(a.name) - legendRank(b.name));
   for (const e of ranked) {
     const swatch = document.createElement("span");
     swatch.className = `chart-legend-mark${e.dashed ? " dashed" : ""}${e.band ? " band" : ""}`;
