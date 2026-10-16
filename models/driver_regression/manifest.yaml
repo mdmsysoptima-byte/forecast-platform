@@ -1,0 +1,15 @@
+code: driver_regression
+name: Sürücü regresyonu
+version: "1.0.0"
+description: >
+  Mevsimsel taban uzerine sürücü duyarliligi ekler. TUFE ve kur sürücüsü
+  zorunludur; promosyon yoğunluğu opsiyoneldir. Ridge cozumu numpy ile.
+entry: model.py
+class: DriverRegression
+supported_grains: [month]
+supported_levels:
+  product: [sku, subcategory]
+  geo: [city, region]
+required_drivers: [cpi, fx_usd]
+optional_drivers: [promo_intensity]
+output_has_interval: true

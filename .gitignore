@@ -1,0 +1,27 @@
+# Sanal ortam ve derleme artiklari
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Demo verisi uretilir, depoda tutulmaz: `.\run.ps1 -Demo` sifirdan kurar.
+# app.db 20 MB, store.db 16 MB; ikisi de tamamen turetilmis veridir.
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/*.parquet
+
+# Calisma zamani
+data/server.log
+data/server.log.err
+data/server.pid
+*.log
+
+# Disa aktarim ciktilari
+*.xlsx
+*.csv
+!configs/**/*.csv
+
+# Isletim sistemi
+Thumbs.db
+.DS_Store

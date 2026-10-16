@@ -1,0 +1,93 @@
+sector: pharma
+name: İlaç
+calendar:
+  type: gregorian
+  fiscal_start_month: 1
+  week_start: monday
+  events: [tr_official_holidays, ramadan, kurban]
+
+dimensions:
+  - code: product
+    name: Ürün
+    type: product
+    hierarchies:
+      - code: therapeutic
+        name: Terapötik hiyerarşi
+        is_default: true
+        levels: [therapeutic_group, molecule, sku]
+  - code: channel
+    name: Kanal
+    type: channel
+    hierarchies:
+      - code: default
+        name: Kanal hiyerarşisi
+        is_default: true
+        levels: [channel_type, channel]
+
+measures:
+  - code: units
+    name: Kutu
+    unit_type: quantity
+    base_unit: kutu
+  - code: revenue
+    name: Ciro
+    unit_type: value
+    base_unit: TRY
+    formula: units * price
+
+unit_conversions:
+  - {from_unit: koli, to_unit: kutu, factor: 24}
+
+drivers:
+  - code: pharma_euro
+    name: İlaç avrosu
+    unit: TRY
+    source_type: manual
+    grain: month
+    scope: global
+  - code: cpi
+    name: TÜFE
+    unit: endeks
+    source_type: table
+    source_ref: price_index:tufe
+    grain: month
+    scope: global
+  - code: tender_calendar
+    name: İhale takvimi
+    unit: adet
+    source_type: manual
+    grain: month
+    scope: product
+
+reason_codes:
+  - {code: tender, name: İhale, requires_note: true}
+  - {code: price_period, name: Fiyat dönemi stoklaması, requires_note: false}
+  - {code: stockout, name: Stok yok, requires_note: false}
+  - {code: launch, name: Lansman, requires_note: true}
+  - {code: competitor, name: Rakip hareketi, requires_note: true}
+
+event_types:
+  - {code: price_change, name: Fiyat değişikliği, effect: level}
+  - {code: reimbursement, name: Geri ödeme listesi değişikliği, effect: level}
+  - {code: launch, name: Lansman, effect: ramp}
+
+layers:
+  consensus_rule: planner_then_sales_then_statistical
+
+cycle:
+  grain: month
+  horizon_periods: 18
+  fence_periods: 1
+  freeze_periods: 2
+
+alerts:
+  change_vs_prior_pct: 15
+  wmape_lag1_threshold: 30
+  missing_periods: 2
+
+reports:
+  extra: [sell_in_sell_out, tender_pipeline]
+
+models:
+  - code: seasonal_naive
+  - code: driver_regression

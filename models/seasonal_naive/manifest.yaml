@@ -1,0 +1,15 @@
+code: seasonal_naive
+name: Mevsimsel naive
+version: "1.0.0"
+description: >
+  Son 12 donemin mevsim profilini ve son 6 donemin seviyesini kullanir.
+  Sürücü istemez, sözleşmeyi dogrulamak için referans modeldir.
+entry: model.py
+class: SeasonalNaive
+supported_grains: [month, week]
+supported_levels:
+  product: [sku, subcategory, category]
+  geo: [city, region, country]
+required_drivers: []
+optional_drivers: []
+output_has_interval: true
