@@ -6,7 +6,7 @@
 import { api } from "../api.js";
 import * as charts from "../charts.js";
 import {
-  card, clear, el, empty, fmt, loading, pageHeader, segmented, select, table,
+  card, clear, el, empty, fmt, loading, multiSelect, pageHeader, segmented, select, table,
 } from "../ui.js";
 
 const UNIT_LABEL = { TRY: "TL", USD: "USD", EUR: "EUR" };
@@ -25,8 +25,6 @@ export async function render({ state }) {
     try {
       data = await api.cockpitOverview({
         measure: cfg.measure, grain: cfg.grain, aggregate: cfg.aggregate,
-        window_mode: cfg.windowMode,
-        horizon_periods: cfg.horizon, history_periods: cfg.history,
         start_label: cfg.startLabel, end_label: cfg.endLabel,
         models: cfg.models, gap_model: cfg.gapModel,
         scope: cfg.scope, view: cfg.view, currency: cfg.currency,
@@ -35,7 +33,7 @@ export async function render({ state }) {
       clear(body).append(empty(err.message, "exclamation-triangle"));
       return;
     }
-    // Tarih moduna ilk geçişte uçlar mevcut pencereden devralınır, boş açılmaz.
+    // Uçlar ilk açılışta sunucunun kurduğu varsayılan pencereden devralınır.
     if (!cfg.startLabel) cfg.startLabel = data.meta.start_label;
     if (!cfg.endLabel) cfg.endLabel = data.meta.end_label;
     // Sunucu seçimi düzeltmiş olabilir (boş liste, kapsam dışı model).
@@ -45,36 +43,16 @@ export async function render({ state }) {
     clear(headerHost).append(pageHeader("Kokpit"));
     paintFilters(data);
     clear(body);
-    body.append(comparisonCard(data), accuracyCard(data), gapCard(data, cfg, load));
+    body.append(comparisonCard(data, cfg, load), accuracyCard(data), gapCard(data, cfg));
   }
 
   function paintFilters(data) {
     const o = data.options;
     const measure = o.measures.find((m) => m.code === cfg.measure);
     const isValue = measure?.unit_type === "value";
-    const isRange = cfg.windowMode === "range";
-
-    // Dönem modunda uçlar "kaç dönem geriye/ileriye", tarih modunda doğrudan
-    // tarihtir; etiketler de buna göre değişir.
-    const windowFields = isRange
-      ? [
-        ["Başlangıç", periodSelect(o.periods, cfg.startLabel, (v) => { cfg.startLabel = v; load(); })],
-        ["Bitiş", periodSelect(o.periods, cfg.endLabel, (v) => { cfg.endLabel = v; load(); })],
-      ]
-      : [
-        ["Geçmiş", segmented("ck-start",
-          o.histories.map((h) => ({ value: h, label: `${h} dönem` })),
-          cfg.history, (v) => { cfg.history = Number(v); load(); })],
-        ["Gelecek", segmented("ck-end",
-          o.horizons.map((h) => ({ value: h, label: `${h} dönem` })),
-          cfg.horizon, (v) => { cfg.horizon = Number(v); load(); })],
-      ];
 
     const showFields = [
-      ["Ölçü", segmented("ck-measure",
-        o.measures.map((m) => ({ value: m.code, label: m.name })),
-        cfg.measure, (v) => { cfg.measure = v; load(); })],
-      ["Kova", segmented("ck-grain",
+      ["Zaman birimi", segmented("ck-grain",
         o.grains.map((g) => ({ value: g.code, label: g.label })),
         cfg.grain, (v) => { cfg.grain = v; load(); })],
       ["Değer", segmented("ck-agg",
@@ -96,16 +74,14 @@ export async function render({ state }) {
 
     const groups = [
       ["Dönem", [
-        ["Pencere", segmented("ck-wmode",
-          o.window_modes.map((m) => ({ value: m.code, label: m.label })),
-          cfg.windowMode, (v) => { cfg.windowMode = v; load(); })],
-        ...windowFields,
+        ["Başlangıç", periodSelect(o.periods, cfg.startLabel, (v) => { cfg.startLabel = v; load(); })],
+        ["Bitiş", periodSelect(o.periods, cfg.endLabel, (v) => { cfg.endLabel = v; load(); })],
       ]],
       ["Kapsam", [
         ["Boyut", dimensionSelect(o, cfg, load)],
         ["Alt kapsam", nodeSelect(o, cfg, load)],
       ]],
-      ["Model", [[null, modelPicker(o, cfg, load)]]],
+      ["Model", [["Karşılaştırılan", modelPicker(o, cfg, load)]]],
       ["Gösterim", showFields],
     ];
 
@@ -127,29 +103,16 @@ export async function render({ state }) {
 /* Modeller çoklu seçim: işaretlenenler hem tabloya hem grafiğe gelir.
    En az biri kalmalı, yoksa ekranda karşılaştıracak bir şey olmaz. */
 function modelPicker(options, cfg, reload) {
-  const box = el("div", { class: "d-flex flex-column gap-1" });
-  for (const m of options.models) {
-    const id = `ck-model-${m.code}`;
-    const input = el("input", {
-      type: "checkbox", class: "form-check-input mt-0", id,
-      onchange: () => {
-        const next = input.checked
-          ? [...cfg.models, m.code]
-          : cfg.models.filter((c) => c !== m.code);
-        if (!next.length) { input.checked = true; return; }
-        cfg.models = next;
-        reload();
-      },
-    });
-    input.checked = cfg.models.includes(m.code);
-    box.append(el("div", { class: "form-check d-flex align-items-center gap-2 m-0" }, [
-      input,
-      el("label", {
-        class: "form-check-label small", for: id, title: `${m.label}: ${m.source} katmanı`, text: m.label,
-      }),
-    ]));
-  }
-  return box;
+  return multiSelect(
+    options.models.map((m) => ({
+      value: m.code, label: m.label,
+      color: charts.MODEL_COLOR(m.code),
+      title: `${m.label}: ${m.source} katmanı`,
+    })),
+    cfg.models,
+    (next) => { cfg.models = next; reload(); },
+    { label: "Karşılaştırılan modeller", placeholder: "Model seçin" },
+  );
 }
 
 function periodSelect(periods, value, onChange) {
@@ -192,35 +155,6 @@ function unitLabel(meta) {
   return meta.view === "fx" ? meta.currency : "TL";
 }
 
-/* Her blok hangi filtrelerle çizildiğini kendi başlığında söyler. Filtre
-   değişince sayılar yeniden ölçekleniyor ama şekil benzer kaldığı için
-   ekranın tepki verdiği başka türlü anlaşılmıyor. */
-function filterNote(data) {
-  const m = data.meta;
-  const viewLabel = m.unit_type === "value"
-    ? ({ nominal: "nominal", real: "reel", fx: m.currency }[m.view] || m.view)
-    : null;
-  const grain = { month: "ay", quarter: "çeyrek", year: "yıl" }[m.grain] || m.grain;
-  const agg = m.aggregate === "average" ? "dönem ortalaması" : "toplam";
-  return [
-    `${m.measure_name}${viewLabel ? ` (${viewLabel})` : ""}`,
-    scopeName(data),
-    `${m.start_label} – ${m.end_label}`,
-    `${grain} kovası`,
-    agg,
-  ].filter(Boolean).join(" · ");
-}
-
-function scopeName(data) {
-  const dim = Object.keys(data.meta.scope || {})[0];
-  if (!dim) return null;
-  const scope = (data.options.scopes || []).find((s) => s.dimension === dim);
-  const nodeId = data.meta.scope[dim]?.nodes?.[0];
-  const node = scope?.nodes.find((n) => String(n.node_id) === String(nodeId));
-  if (!scope) return null;
-  return node ? `${scope.name} / ${node.label}` : scope.name;
-}
-
 function modelColor(code, provenance) {
   return charts.MODEL_COLOR(code) || ({
     actual: charts.PROVENANCE.actual(),
@@ -239,12 +173,15 @@ function rowLabel(r) {
 }
 
 /* Grafik ve tablo tek kartta: aynı pencereye bakıyorlar, ayrı başlık ikisini
-   iki ayrı şey gibi gösteriyordu. */
-function comparisonCard(data) {
+   iki ayrı şey gibi gösteriyordu.
+   Ölçü seçimi burada duruyor çünkü yalnızca grafiği değiştiriyor: tablo adet
+   ve ciroyu zaten yan yana taşıyor, bütçe farkı adet üzerinden okunuyor. */
+function comparisonCard(data, cfg, reload) {
   const t = data.table;
   const tl = data.timeline;
   const labels = tl.buckets.map((b) => b.label);
   const currentLabel = tl.current_index >= 0 ? labels[tl.current_index] : null;
+  const freezeLabel = tl.freeze_index >= 0 ? labels[tl.freeze_index] : null;
   const host = el("div", { class: "chart-host" });
   const legend = el("div", {});
 
@@ -254,13 +191,17 @@ function comparisonCard(data) {
     actual: tl.series.actual,
     budget: tl.series.budget,
     lastYear: tl.series.last_year,
-    lower: tl.series.lower,
-    upper: tl.series.upper,
     currentLabel,
+    freezeLabel,
+    freezePeriods: tl.freeze_periods,
     unit: unitLabel(data.meta),
     height: 320,
     legendHost: legend,
   }));
+
+  const measurePicker = segmented("ck-measure",
+    data.options.measures.map((m) => ({ value: m.code, label: m.name })),
+    data.meta.measure, (v) => { cfg.measure = v; reload(); });
 
   const columns = [
     { key: "label", label: "", group: "label" },
@@ -279,11 +220,10 @@ function comparisonCard(data) {
     return flat;
   });
 
-  const note = `${filterNote(data)} · geçmiş ${t.past_periods}, gelecek ${t.future_periods} dönem`;
-  return card("Model karşılaştırma", note, [
+  return card("Model karşılaştırma", null, [
     legend, host,
     el("div", { class: "mt-3" }, [table(columns, rows, { groups })]),
-  ], { class: "mb-3" });
+  ], { class: "mb-3", actions: measurePicker });
 }
 
 function accuracyCard(data) {
@@ -303,46 +243,51 @@ function accuracyCard(data) {
         text: fmt.pct(r.budget_gap),
       }),
   }));
-  const note = `Lag ${a.lag} · bütçe farkı ${a.budget_periods} dönem üzerinden`;
-  return card("Doğruluk ve bütçe farkı", note, [table(columns, rows)], { class: "mb-3" });
+  return card("Doğruluk ve bütçe farkı", null, [table(columns, rows)], { class: "mb-3" });
 }
 
-/* Bütçe farkı tek bir modele bakar; seçenekleri üst filtrede işaretlenenler. */
-function gapCard(data, cfg, reload) {
+/* Bütçe farkı tek bir modele bakar; seçenekleri üst filtrede işaretlenenler.
+   Seçili modellerin tamamı yanıtta geldiği için model değiştirmek sunucuya
+   gitmez, yalnızca bu grafik yeniden çizilir. */
+function gapCard(data, cfg) {
   const chart = data.charts[0];
   if (!chart) return el("div", {});
   const host = el("div", { class: "chart-host" });
-  const pts = chart.points;
-  const content = pts.some((p) => p.gap !== null)
-    ? [host]
-    : [empty("Bu pencerede bütçe yok", "wallet2")];
+  const body = el("div", {});
+  const unit = (data.options.measures.find((m) => m.code === chart.measure) || {}).unit || "";
 
-  if (pts.some((p) => p.gap !== null)) {
+  const draw = (code) => {
+    const picked = chart.models.find((m) => m.code === code) || chart.models[0];
+    if (!picked) { clear(body).append(empty("Seçili model yok", "wallet2")); return; }
+    const pts = picked.points;
+    if (!pts.some((p) => p.gap !== null)) {
+      clear(body).append(empty("Bu pencerede bütçe yok", "wallet2"));
+      return;
+    }
+    clear(body).append(host);
     requestAnimationFrame(() => charts.barLineChart(host, {
       labels: pts.map((p) => p.label),
       bars: pts.map((p) => p.gap),
       line: pts.map((p) => p.cumulative),
       barLabel: "Dönem farkı",
       lineLabel: "Kümülatif",
-      unit: unitLabel(data.meta),
+      unit,
       height: 240,
       maxTicks: 8,
     }));
-  }
+  };
 
   const picker = select(
-    data.meta.models.map((code) => ({
-      value: code,
-      label: (data.options.models.find((m) => m.code === code) || {}).label || code,
-    })),
-    data.meta.gap_model,
-    (v) => { cfg.gapModel = v; reload(); },
+    chart.models.map((m) => ({ value: m.code, label: m.label })),
+    chart.model,
+    (v) => { cfg.gapModel = v; draw(v); },
     { style: "min-width:130px" },
   );
 
-  return card(chart.label, filterNote(data), content, {
-    actions: el("div", { class: "d-flex align-items-end gap-2" }, [
-      el("label", { class: "form-label mb-1 small text-muted align-self-center", text: "Model" }),
+  draw(chart.model);
+  return card(chart.label, null, [body], {
+    actions: el("div", { class: "d-flex align-items-center gap-2" }, [
+      el("label", { class: "form-label mb-0 small text-muted", text: "Model" }),
       picker,
     ]),
   });

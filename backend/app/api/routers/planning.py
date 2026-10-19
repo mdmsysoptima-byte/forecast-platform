@@ -260,11 +260,8 @@ class CockpitRequest(BaseModel):
     version_id: int | None = Field(default=None, description="Boş bırakılırsa en güncel onaylı veya baz versiyon")
     measure: str = Field(default="units", description="Ölçü kodu, örnek: units, revenue")
     grain: str = Field(default="month", description="month, quarter, year")
-    window_mode: str = Field(default="periods", description="periods (dönem sayısı) veya range (tarih aralığı)")
-    horizon_periods: int | None = Field(default=None, description="Dönem modu: ileri dönem sayısı")
-    history_periods: int = Field(default=12, description="Dönem modu: geri dönem sayısı")
-    start_label: str | None = Field(default=None, description="Tarih modu: başlangıç dönemi, örnek 2026-01")
-    end_label: str | None = Field(default=None, description="Tarih modu: bitiş dönemi, örnek 2027-12")
+    start_label: str | None = Field(default=None, description="Başlangıç dönemi, örnek 2026-01; boşsa varsayılan pencere")
+    end_label: str | None = Field(default=None, description="Bitiş dönemi, örnek 2027-12; boşsa varsayılan pencere")
     lag: int = Field(default=1, description="Geçmiş sütunu ve MAPE için snapshot lag'i")
     models: list[str] = Field(default_factory=list, description="Karşılaştırılacak model kodları")
     gap_model: str | None = Field(default=None, description="Bütçe farkı grafiğinin modeli")
@@ -287,8 +284,6 @@ def cockpit_overview(
             db, principal,
             cockpit_svc.CockpitQuery(
                 version_id=payload.version_id, measure=payload.measure, grain=payload.grain,
-                window_mode=payload.window_mode,
-                horizon_periods=payload.horizon_periods, history_periods=payload.history_periods,
                 start_label=payload.start_label, end_label=payload.end_label, lag=payload.lag,
                 models=payload.models, gap_model=payload.gap_model, aggregate=payload.aggregate,
                 scope=payload.scope, view=payload.view, currency=payload.currency,

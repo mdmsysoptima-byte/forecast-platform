@@ -88,56 +88,67 @@ def test_current_bucket_is_flagged(client, planner_headers):
     assert current[0]["flag"] == "fence"
 
 
-def test_horizon_selection_changes_forecast_length(client, planner_headers):
+def test_end_label_sets_the_forecast_length(client, planner_headers):
     counts = {}
-    for horizon in (6, 12, 18):
-        body = overview(client, planner_headers, horizon_periods=horizon, history_periods=12)
+    for end, expected in (("2027-03", 6), ("2027-09", 12), ("2028-03", 18)):
+        body = overview(client, planner_headers, start_label="2025-10", end_label=end)
         # Modeller artik gecmisi de kapsiyor; uzunluk yalnizca gelecek kismindan.
         future = model_points(body, "consensus")[body["timeline"]["current_index"]:]
-        counts[horizon] = sum(1 for v in future if v is not None)
-        assert body["meta"]["horizon_periods"] == horizon
+        counts[expected] = sum(1 for v in future if v is not None)
+        assert body["meta"]["end_label"] == end
     assert counts[6] < counts[12] < counts[18]
     assert counts[18] == 18
 
 
-def test_history_selection_changes_actual_length(client, planner_headers):
-    short = overview(client, planner_headers, history_periods=12)
-    long = overview(client, planner_headers, history_periods=36)
+def test_start_label_sets_the_actual_length(client, planner_headers):
+    short = overview(client, planner_headers, start_label="2025-10", end_label="2028-03")
+    long = overview(client, planner_headers, start_label="2023-10", end_label="2028-03")
     n = lambda b: sum(1 for v in b["timeline"]["series"]["actual"] if v is not None)
     assert n(short) == 12
     assert n(long) > n(short)
 
 
+def test_reversed_ends_are_corrected(client, planner_headers):
+    """Bitişi başlangıçtan geri çekmek ekranı boşaltmamalı."""
+    body = overview(client, planner_headers, start_label="2027-06", end_label="2026-01")
+    assert body["meta"]["start_label"] <= body["meta"]["end_label"]
+    assert body["timeline"]["buckets"], "pencere bos kaldi"
+
+
 def test_grain_rollup_preserves_the_total(client, planner_headers):
     totals = {}
     for grain in ("month", "quarter", "year"):
-        body = overview(client, planner_headers, grain=grain, history_periods=12)
+        body = overview(client, planner_headers, grain=grain,
+                        start_label="2025-10", end_label="2028-03")
         totals[grain] = sum(v for v in model_points(body, "consensus") if v is not None)
     assert totals["quarter"] == pytest.approx(totals["month"], rel=1e-6)
     assert totals["year"] == pytest.approx(totals["month"], rel=1e-6)
 
 
-def test_model_band_wraps_the_statistical_line(client, planner_headers):
+def test_model_band_is_gone(client, planner_headers):
+    """Belirsizlik bandı kaldırıldı: grafikte modellerin kendi çizgileri kalır."""
     body = overview(client, planner_headers)
-    s = body["timeline"]["series"]
-    stat = model_points(body, "statistical")
-    pairs = [
-        (lo, mid, hi)
-        for lo, mid, hi in zip(s["lower"], stat, s["upper"])
-        if lo is not None and mid is not None and hi is not None
-    ]
-    assert pairs, "model araligi hic uretilmedi"
-    for lo, mid, hi in pairs:
-        assert lo <= mid <= hi
+    series = body["timeline"]["series"]
+    assert "lower" not in series and "upper" not in series
 
 
-def test_band_disappears_when_its_model_is_not_selected(client, planner_headers):
-    """Belirsizlik bandı modelin ham çıktısına ait; o model seçili değilse band
-    başka bir çizgiyi sarıyormuş gibi görünürdü."""
-    body = overview(client, planner_headers, models=["consensus"])
-    s = body["timeline"]["series"]
-    assert all(v is None for v in s["lower"])
-    assert all(v is None for v in s["upper"])
+# ------------------------------------------------------------ donma bolgesi
+def test_freeze_window_is_marked_on_the_timeline(client, planner_headers):
+    """Donma sınırı çevrimin kendi ayarından gelir, ekrana sabit yazılmaz."""
+    body = overview(client, planner_headers)
+    tl = body["timeline"]
+    freeze = body["cycle"]["freeze_periods"]
+    assert tl["freeze_periods"] == freeze
+    assert tl["freeze_index"] == tl["current_index"] + freeze - 1
+    assert tl["buckets"][tl["freeze_index"]]["label"] >= tl["buckets"][tl["current_index"]]["label"]
+
+
+def test_freeze_window_survives_a_coarser_grain(client, planner_headers):
+    """Çeyrek kovada donma dönemleri tek kovaya düşebilir; sınır geri gitmemeli."""
+    body = overview(client, planner_headers, grain="quarter")
+    tl = body["timeline"]
+    assert tl["freeze_index"] >= tl["current_index"]
+    assert tl["freeze_index"] < len(tl["buckets"])
 
 
 # --------------------------------------------------- model karsilastirma
@@ -243,11 +254,17 @@ def test_accuracy_mape_matches_the_analysis_endpoint(client, planner_headers):
     assert row["mape"] == pytest.approx(reported, rel=0.02)
 
 
+def gap_points(body, code=None):
+    chart = next(c for c in body["charts"] if c["code"] == "budget_gap")
+    code = code or chart["model"]
+    return next(m for m in chart["models"] if m["code"] == code)["points"]
+
+
 def test_only_the_budget_gap_chart_remains(client, planner_headers):
     body = overview(client, planner_headers)
     charts = {c["code"]: c for c in body["charts"]}
     assert set(charts) == {"budget_gap"}
-    gap = [p for p in charts["budget_gap"]["points"] if p["gap"] is not None]
+    gap = [p for p in gap_points(body) if p["gap"] is not None]
     assert gap, "butce farki noktasi yok"
     # The cumulative series must be the running sum of the period gaps.
     running = 0.0
@@ -256,17 +273,40 @@ def test_only_the_budget_gap_chart_remains(client, planner_headers):
         assert p["cumulative"] == pytest.approx(running, abs=0.5)
 
 
+def test_gap_chart_carries_every_selected_model(client, planner_headers):
+    """Model değiştirmek sunucuya gitmemeli: seçili modellerin tamamı tek
+    yanıtta gelir, grafik aralarından birini gösterir."""
+    picked = ["statistical", "sales", "consensus"]
+    body = overview(client, planner_headers, models=picked)
+    chart = next(c for c in body["charts"] if c["code"] == "budget_gap")
+    assert [m["code"] for m in chart["models"]] == picked
+    labels = [b["label"] for b in body["timeline"]["buckets"]]
+    for m in chart["models"]:
+        assert [p["label"] for p in m["points"]] == labels
+
+
+def test_gap_chart_is_read_in_units_whatever_the_chart_measure(client, planner_headers):
+    """Ölçü seçimi yalnızca ana grafiğin filtresi; bütçe adet cinsinden tutuluyor."""
+    units = overview(client, planner_headers, measure="units")
+    revenue = overview(client, planner_headers, measure="revenue")
+    chart = next(c for c in revenue["charts"] if c["code"] == "budget_gap")
+    assert chart["measure"] == "units"
+    a = [p["gap"] for p in gap_points(units) if p["gap"] is not None]
+    b = [p["gap"] for p in gap_points(revenue) if p["gap"] is not None]
+    assert a == pytest.approx(b, rel=1e-6)
+
+
 def test_budget_gap_chart_spans_the_whole_window(client, planner_headers):
     """Grafik bütçe verisinin kapsamına değil, seçilen pencereye oturmalı;
     aksi halde tarih aralığını genişletmek hiçbir şeyi değiştirmiyor görünür."""
-    body = overview(client, planner_headers, window_mode="range",
+    body = overview(client, planner_headers,
                     start_label="2024-06", end_label="2028-03")
     labels = [b["label"] for b in body["timeline"]["buckets"]]
-    chart = next(c for c in body["charts"] if c["code"] == "budget_gap")
-    assert [p["label"] for p in chart["points"]] == labels
+    pts = gap_points(body)
+    assert [p["label"] for p in pts] == labels
     # Bütçesi olmayan dönemler boş gelir, atılmaz.
-    assert any(p["gap"] is None for p in chart["points"])
-    assert any(p["gap"] is not None for p in chart["points"])
+    assert any(p["gap"] is None for p in pts)
+    assert any(p["gap"] is not None for p in pts)
 
 
 def test_every_model_gets_a_budget_gap(client, planner_headers):
@@ -292,12 +332,11 @@ def test_gap_chart_follows_its_own_model_picker(client, planner_headers):
     chart = next(c for c in body["charts"] if c["code"] == "budget_gap")
     assert body["meta"]["gap_model"] == "statistical"
     assert chart["model"] == "statistical"
-    assert chart["model_label"] == "Model 1"
+    assert next(m for m in chart["models"] if m["code"] == "statistical")["label"] == "Model 1"
 
-    other = overview(client, planner_headers, gap_model="consensus")
-    mine = [p["gap"] for p in chart["points"] if p["gap"] is not None]
-    theirs = [p["gap"] for p in next(c for c in other["charts"])["points"] if p["gap"] is not None]
-    assert mine != theirs, "model secimi butce farkini degistirmiyor"
+    mine = [p["gap"] for p in gap_points(body, "statistical") if p["gap"] is not None]
+    theirs = [p["gap"] for p in gap_points(body, "consensus") if p["gap"] is not None]
+    assert mine != theirs, "modeller ayni butce farkini veriyor"
 
 
 def test_gap_model_must_be_among_the_selected_models(client, planner_headers):
@@ -310,15 +349,15 @@ def test_budget_gap_reaches_into_the_past(client, planner_headers):
     """Bütçe yıllık bir plandır, kapanmış dönemleri de kapsar; fark grafiği
     yalnızca geleceğe bakarsa planın tutup tutmadığı hiç görünmez."""
     body = overview(client, planner_headers)
-    chart = next(c for c in body["charts"] if c["code"] == "budget_gap")
     labels = [b["label"] for b in body["timeline"]["buckets"]]
     cut = body["timeline"]["current_index"]
     past_labels = set(labels[:cut])
-    filled_past = [p for p in chart["points"] if p["gap"] is not None and p["label"] in past_labels]
+    filled_past = [p for p in gap_points(body)
+                   if p["gap"] is not None and p["label"] in past_labels]
     assert filled_past, "butce farki gecmise gitmiyor"
 
 
-def test_forecast_window_is_never_shorter_than_history(client, planner_headers):
+def test_default_window_leans_on_the_forecast(client, planner_headers):
     """Kokpit bir tahmin ekranı: varsayılan görünümde gerçekleşen kuyruğu
     tahmin penceresinden uzun olmamalı, yoksa grafiğin ağırlığı geçmişe kayar."""
     # Yardımcı pencereyi sabitlediği için varsayılanlar boş gövdeyle sınanır.
@@ -326,41 +365,37 @@ def test_forecast_window_is_never_shorter_than_history(client, planner_headers):
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["meta"]["history_periods"] <= body["meta"]["horizon_periods"]
-    assert max(body["options"]["histories"]) <= max(body["options"]["horizons"])
+    # Uclar geri yazilmali, yoksa on yuz pencereyi hic gosteremez.
+    assert body["meta"]["start_label"] and body["meta"]["end_label"]
 
 
 def test_options_drive_the_selectors(client, planner_headers):
     opts = overview(client, planner_headers)["options"]
     assert {m["code"] for m in opts["measures"]} == {"units", "revenue"}
     assert [g["code"] for g in opts["grains"]] == ["month", "quarter", "year"]
-    assert opts["horizons"] and max(opts["horizons"]) <= 18
     assert opts["scopes"], "kapsam secenegi uretilmedi"
     assert all(s["nodes"] for s in opts["scopes"])
-    assert [m["code"] for m in opts["window_modes"]] == ["periods", "range"]
-    assert len(opts["periods"]) > 24, "tarih araligi secenekleri uretilmedi"
+    assert len(opts["periods"]) > 24, "pencere ucu secenekleri uretilmedi"
+    # Donem sayisi modu kaldirildi; pencere yalnizca iki tarihten ibaret.
+    assert "window_modes" not in opts
+    assert "horizons" not in opts and "histories" not in opts
 
 
 # ------------------------------------------------------------------ pencere
-def test_date_range_mode_sets_both_ends(client, planner_headers):
-    body = overview(client, planner_headers, window_mode="range",
-                    start_label="2026-01", end_label="2027-06")
+def test_both_ends_are_honoured(client, planner_headers):
+    body = overview(client, planner_headers, start_label="2026-01", end_label="2027-06")
     meta = body["meta"]
-    assert meta["window_mode"] == "range"
     assert meta["start_label"] == "2026-01"
     assert meta["end_label"] == "2027-06"
     labels = [b["label"] for b in body["timeline"]["buckets"]]
     assert labels[0] == "2026-01" and labels[-1] == "2027-06"
 
 
-def test_both_window_modes_describe_the_same_window(client, planner_headers):
-    """Aynı pencere iki ayrı biçimde ifade edilince aynı sayıyı vermeli."""
-    by_count = overview(client, planner_headers, history_periods=6, horizon_periods=6)
-    span = by_count["meta"]
-    by_range = overview(client, planner_headers, window_mode="range",
-                        start_label=span["start_label"], end_label=span["end_label"])
-    a = table_row(by_count, "consensus")["cells"]["units_future"]
-    b = table_row(by_range, "consensus")["cells"]["units_future"]
-    assert a == pytest.approx(b, rel=0.001)
+def test_unknown_labels_fall_back_to_the_default_window(client, planner_headers):
+    """Takvimde olmayan bir uç ekranı boşaltmamalı."""
+    body = overview(client, planner_headers, start_label="1999-01", end_label="2100-12")
+    assert body["timeline"]["buckets"], "pencere bos kaldi"
+    assert body["meta"]["history_periods"] > 0
 
 
 # ------------------------------------------------------------------- kapsam

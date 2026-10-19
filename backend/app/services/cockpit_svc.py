@@ -11,7 +11,6 @@ screen.
 """
 from __future__ import annotations
 
-import math
 from collections import defaultdict
 from dataclasses import dataclass, field
 
@@ -28,10 +27,11 @@ from app.services import cycle_svc, layers, measures
 from app.services.hierarchy import resolve_scope
 from app.services.reconciliation import convert_grain
 
-HORIZON_CHOICES = [6, 12, 18]
-# Geçmiş seçenekleri ufukla aynı: kokpit bir tahmin ekranı, gerçekleşen kuyruğu
-# tahmin penceresinden uzun olunca grafiğin ağırlığı geçmişe kayıyor.
-HISTORY_CHOICES = [6, 12, 18]
+# Pencere varsayilani: start/end verilmediginde mevcut dönemin bu kadar
+# oncesinden baslayip bu kadar sonrasinda biter. Kokpit bir tahmin ekrani,
+# gerceklesen kuyrugu tahminden uzun olunca grafigin agirligi gecmise kayiyor.
+DEFAULT_BACK = 12
+DEFAULT_FORWARD = 18
 GRAIN_CHOICES = [("month", "Ay"), ("quarter", "Çeyrek"), ("year", "Yıl")]
 VIEW_CHOICES = [("nominal", "Nominal TL"), ("real", "Reel TL"), ("fx", "Döviz")]
 REFERENCE_LAYERS = ["budget", "last_year"]
@@ -55,8 +55,10 @@ MODEL_LABELS = {code: f"Model {i + 1}" for i, (code, _c) in enumerate(MODEL_CHAI
 NEEDED_LAYERS = sorted({c for _m, chain in MODEL_CHAINS for c in chain} | set(REFERENCE_LAYERS))
 # Tabloda kendi gecmis/gelecek sutun ciftini tasiyan olculer.
 HEADLINE_MEASURES = ["units", "revenue"]
-WINDOW_MODES = [("periods", "Dönem sayısı"), ("range", "Tarih aralığı")]
 AGGREGATES = [("total", "Toplam"), ("average", "Ortalama")]
+# Butce farki her zaman adet uzerinden okunur: butce adet cinsinden tutuluyor
+# ve olcu secimi artik yalnizca ana grafigin filtresi.
+GAP_MEASURE = "units"
 DEFAULT_LAG = 1
 DEFAULT_MODELS = ["statistical", "consensus"]
 
@@ -66,12 +68,8 @@ class CockpitQuery:
     version_id: int | None = None
     measure: str = "units"
     grain: str = "month"
-    # Pencere iki uc noktadan ibaret; window_mode yalnizca ifade bicimini
-    # degistirir. "periods" modunda start/end gecmis ve gelecek donem sayisidir,
-    # "range" modunda dogrudan donem etiketidir (ornek: 2026-01).
-    window_mode: str = "periods"
-    horizon_periods: int | None = None
-    history_periods: int = 12
+    # Pencere iki donem etiketinden ibaret (ornek: 2026-01). Bos birakilirsa
+    # mevcut donemin etrafinda varsayilan pencere kurulur.
     start_label: str | None = None
     end_label: str | None = None
     lag: int = DEFAULT_LAG
@@ -111,29 +109,42 @@ def _pick_version(db: Session, version_id: int | None) -> Version | None:
 def _window(db: Session, cycle: Cycle, current: TimeBucket, q: CockpitQuery):
     """Pencerenin iki ucunu aylık kovalara çevirir: (geçmiş, gelecek).
 
-    Sınır her iki modda aynı: mevcut dönem ve sonrası gelecek, öncesi geçmiş.
+    Sınır mevcut dönem: o ve sonrası gelecek, öncesi geçmiş. Uçlardan biri
+    verilmezse ya da takvimde yoksa varsayılan pencereye düşülür; ekran hiçbir
+    durumda boş kalmaz.
     """
-    if q.window_mode == "range" and (q.start_label or q.end_label):
-        rows = list(db.execute(
-            select(TimeBucket)
-            .where(TimeBucket.calendar_id == cycle.calendar_id, TimeBucket.grain == cycle.grain)
-            .order_by(TimeBucket.seq)
-        ).scalars())
-        by_label = {b.label: b for b in rows}
-        start = by_label.get(q.start_label or "")
-        end = by_label.get(q.end_label or "")
-        picked = [
-            b for b in rows
-            if (start is None or b.seq >= start.seq) and (end is None or b.seq <= end.seq)
-        ]
-        if picked:
-            return ([b for b in picked if b.seq < current.seq],
-                    [b for b in picked if b.seq >= current.seq])
+    rows = list(db.execute(
+        select(TimeBucket)
+        .where(TimeBucket.calendar_id == cycle.calendar_id, TimeBucket.grain == cycle.grain)
+        .order_by(TimeBucket.seq)
+    ).scalars())
+    by_label = {b.label: b for b in rows}
+    start = by_label.get(q.start_label or "")
+    end = by_label.get(q.end_label or "")
+    if start is None:
+        start = by_label.get(_label_at(rows, current, -DEFAULT_BACK))
+    if end is None:
+        end = by_label.get(_label_at(rows, current, DEFAULT_FORWARD - 1))
+    # Uclar ters verilmisse duzelt; kullanici bitisi baslangictan geri cekebilir.
+    if start is not None and end is not None and start.seq > end.seq:
+        start, end = end, start
 
-    horizon = max(1, min(int(q.horizon_periods or cycle.horizon_periods), cycle.horizon_periods))
-    future = cycle_svc.forecast_window(db, cycle)[:horizon]
-    history = cycle_svc.history_window(db, cycle, periods=max(1, int(q.history_periods)))
-    return history, future
+    picked = [
+        b for b in rows
+        if (start is None or b.seq >= start.seq) and (end is None or b.seq <= end.seq)
+    ]
+    if not picked:
+        picked = rows
+    return ([b for b in picked if b.seq < current.seq],
+            [b for b in picked if b.seq >= current.seq])
+
+
+def _label_at(rows: list[TimeBucket], current: TimeBucket, offset: int) -> str:
+    """Mevcut dönemden offset kadar uzaktaki kovanın etiketi; taşarsa uç kova."""
+    if not rows:
+        return ""
+    index = next((i for i, b in enumerate(rows) if b.id == current.id), 0)
+    return rows[max(0, min(len(rows) - 1, index + offset))].label
 
 
 def _period_count(db: Session, cycle: Cycle, grain: str, months: list[TimeBucket]) -> int:
@@ -212,8 +223,10 @@ def overview(db: Session, principal: Principal, q: CockpitQuery) -> dict:
             "cycle": _cycle_block(db, cycle, current),
             "version": _version_block(version),
             "options": _options(db, cycle, principal),
-            "timeline": {"buckets": [], "current_index": -1, "series": {}},
+            "timeline": {"buckets": [], "current_index": -1, "freeze_index": -1,
+                         "freeze_periods": cycle.freeze_periods, "models": [], "series": {}},
             "table": {"column_groups": [], "columns": [], "rows": [], "lag": q.lag},
+            "accuracy": {"rows": [], "lag": q.lag, "budget_periods": 0},
             "charts": [], "summary": "Kapsamda seri yok",
         }
 
@@ -233,7 +246,6 @@ def overview(db: Session, principal: Principal, q: CockpitQuery) -> dict:
         code: layers.read_values(db, version.id, code, scope_keys, month_ids)
         for code in NEEDED_LAYERS
     }
-    band_raw = _model_band(db, store, version, scope_keys, future_ids)
 
     def shaped(values, measure_code):
         scaled = _scale(db, values, measure_code, q.view, q.currency, scope_keys, month_ids, cache)
@@ -259,14 +271,6 @@ def overview(db: Session, principal: Principal, q: CockpitQuery) -> dict:
     last_year_all.update({k: v for k, v in layer_raw["last_year"].items() if k[1] not in past_ids})
     series_out["last_year"] = shaped(last_year_all, q.measure)
 
-    # Uncertainty adds in quadrature under an independence assumption, both
-    # across series and across the periods folded into a coarser bucket.
-    band_scaled = _scale(db, band_raw, q.measure, q.view, q.currency, scope_keys, month_ids, cache)
-    variance = defaultdict(float)
-    for (_sk, bid), half in band_scaled.items():
-        variance[bid] += half * half
-    variance = _roll_up(db, dict(variance), cycle.grain, q.grain)
-
     target_buckets = _target_buckets(db, cycle, q.grain, month_buckets)
     flags = cycle_svc.period_flags(db, cycle)
     current_index = _current_index(target_buckets, current, q.grain)
@@ -280,12 +284,10 @@ def overview(db: Session, principal: Principal, q: CockpitQuery) -> dict:
         out = series_out.get(code, {})
         return [round(out[b.id] / divisor(b.id), 2) if b.id in out else None for b in target_buckets]
 
-    half = [round(math.sqrt(variance.get(b.id, 0.0)) / divisor(b.id), 2) if variance.get(b.id) else None
-            for b in target_buckets]
-    # Belirsizlik bandi modelin ham ciktisina ait; o model secili degilse band yok.
-    band_base = column("statistical") if "statistical" in model_raw else [None] * len(target_buckets)
-    lower = [round(max(0.0, s - h), 2) if s is not None and h else None for s, h in zip(band_base, half)]
-    upper = [round(s + h, 2) if s is not None and h else None for s, h in zip(band_base, half)]
+    # Donma penceresi: mevcut dönemden itibaren cevrimin freeze_periods kadari
+    # degistirilemez. Grafikte bu araligi tarayarak gosteriyoruz, sayi ekrandan
+    # degil cevrim ayarindan gelir.
+    freeze_index = _freeze_index(target_buckets, current, cycle, q.grain, current_index)
 
     timeline = {
         "buckets": [
@@ -297,13 +299,13 @@ def overview(db: Session, principal: Principal, q: CockpitQuery) -> dict:
             for b in target_buckets
         ],
         "current_index": current_index,
+        "freeze_index": freeze_index,
+        "freeze_periods": cycle.freeze_periods,
         "models": [{"code": c, "label": MODEL_LABELS[c], "points": column(c)} for c in selected],
         "series": {
             "actual": column("actual"),
             "budget": column("budget"),
             "last_year": column("last_year"),
-            "lower": lower,
-            "upper": upper,
         },
     }
 
@@ -311,7 +313,12 @@ def overview(db: Session, principal: Principal, q: CockpitQuery) -> dict:
                          actual_raw, model_raw, layer_raw, cache)
     accuracy = _accuracy_table(db, q, scope_keys, past_ids, future_ids, model_raw, layer_raw)
     gap_model = q.selected_gap_model()
-    charts = _charts(db, q, target_buckets, series_out, gap_model, divisor)
+    # Butce farki adet uzerinden; olcu secimi yalnizca ana grafigi ilgilendirir.
+    # Secili her model icin ayri seri doner, boylece grafigin kendi model
+    # seciciyi degistirmek sunucuya yeni bir istek gerektirmez.
+    gap_series = {code: shaped(values, GAP_MEASURE) for code, values in model_raw.items()}
+    gap_series["budget"] = shaped(layer_raw["budget"], GAP_MEASURE)
+    charts = _charts(q, target_buckets, gap_series, divisor)
 
     measure = db.execute(select(Measure).where(Measure.code == q.measure)).scalar_one_or_none()
     headline = selected[-1]
@@ -334,7 +341,6 @@ def overview(db: Session, principal: Principal, q: CockpitQuery) -> dict:
             "models": selected,
             "gap_model": gap_model,
             "scope": q.scope or {},
-            "window_mode": q.window_mode,
             "start_label": history[0].label if history else (future[0].label if future else ""),
             "end_label": future[-1].label if future else (history[-1].label if history else ""),
             "horizon_periods": len(future), "history_periods": len(history),
@@ -403,20 +409,31 @@ def _shifted_actuals(db, store, cycle, scope_keys, history, months_back: int) ->
     return out
 
 
-def _model_band(db: Session, store, version: Version, scope_keys: set[str], future_ids: list[int]) -> dict:
-    """Half width of the model interval per series and period."""
-    if not version.run_id:
-        return {}
-    wanted = set(future_ids)
-    out: dict[tuple[str, int], float] = {}
-    for row in store.read_run_result(version.run_id):
-        if row["series_key"] not in scope_keys or row["bucket_id"] not in wanted:
-            continue
-        lower, upper = row.get("lower"), row.get("upper")
-        if lower is None or upper is None:
-            continue
-        out[(row["series_key"], row["bucket_id"])] = max(0.0, (float(upper) - float(lower)) / 2.0)
-    return out
+def _freeze_index(target_buckets, current: TimeBucket, cycle: Cycle, grain: str, current_index: int) -> int:
+    """Donma penceresinin son kovasının indeksi; yoksa -1.
+
+    Çevrimin freeze_periods değeri aylık dönem sayısıdır. Kova iriyse (çeyrek,
+    yıl) o dönemlerin düştüğü son kova aranır, böylece taralı alan her zaman
+    gerçek donma sınırında biter.
+    """
+    if current_index < 0 or cycle.freeze_periods <= 0:
+        return -1
+    if grain == current.grain:
+        return min(len(target_buckets) - 1, current_index + cycle.freeze_periods - 1)
+    months = db_month_span(current, cycle.freeze_periods)
+    last = current_index
+    for i, b in enumerate(target_buckets):
+        if b.start_date <= months <= b.end_date:
+            last = i
+    return max(current_index, last)
+
+
+def db_month_span(current: TimeBucket, periods: int):
+    """Mevcut dönemden periods ay sonrasının başlangıç tarihi."""
+    year, month = current.start_date.year, current.start_date.month + periods - 1
+    year += (month - 1) // 12
+    month = (month - 1) % 12 + 1
+    return current.start_date.replace(year=year, month=month, day=1)
 
 
 def _target_buckets(db: Session, cycle: Cycle, grain: str, month_buckets: list[TimeBucket]) -> list[TimeBucket]:
@@ -500,9 +517,6 @@ def _options(db: Session, cycle: Cycle, principal: Principal) -> dict:
                      for m in measures_rows],
         "grains": [{"code": c, "label": l} for c, l in GRAIN_CHOICES],
         "views": [{"code": c, "label": l} for c, l in VIEW_CHOICES],
-        "horizons": [h for h in HORIZON_CHOICES if h <= cycle.horizon_periods] or [cycle.horizon_periods],
-        "histories": HISTORY_CHOICES,
-        "window_modes": [{"code": c, "label": l} for c, l in WINDOW_MODES],
         "aggregates": [{"code": c, "label": l} for c, l in AGGREGATES],
         # Numaralandirma tek yerde: filtre, tablo ve grafik ayni listeyi kullanir.
         # source yalnizca ipucu icin; ekranda katman adi gecmez.
@@ -510,8 +524,8 @@ def _options(db: Session, cycle: Cycle, principal: Principal) -> dict:
             {"code": code, "label": MODEL_LABELS[code], "source": _layer_name(db, code)}
             for code, _chain in MODEL_CHAINS
         ],
-        # Tarih araligi modunun secenekleri: cevrimin takvimindeki tum aylik
-        # kovalar. Baslangic ve bitis ayni listeden secilir.
+        # Pencere uclari: cevrimin takvimindeki tum aylik kovalar. Baslangic ve
+        # bitis ayni listeden secilir.
         "periods": [
             {"label": b.label, "seq": b.seq}
             for b in db.execute(
@@ -634,36 +648,44 @@ def _accuracy_table(db, q, scope_keys, past_ids, future_ids, model_raw, layer_ra
     return {"rows": rows, "lag": lag, "budget_periods": len(budget_ids)}
 
 
-def _charts(db, q, target_buckets, series_out, gap_model, divisor) -> list[dict]:
-    """Bütçe farkı, seçilen tek bir modelin bütçeye göre sapması.
+def _charts(q, target_buckets, gap_series, divisor) -> list[dict]:
+    """Bütçe farkı: her seçili modelin bütçeye göre sapması.
 
-    Model seçimi genel filtreden değil grafiğin kendi seçicisinden gelir;
-    seçenekleri genel filtrede işaretlenmiş modellerdir. Kümülatif çizgi
-    bütçesi olmayan dönemlerde sıfırlanmaz, kaldığı yerden devam eder.
+    Seçili modellerin tamamı döner, grafik aralarından birini gösterir. Ayrı
+    ayrı istemek model değiştirmeyi bir sunucu turuna bağlardı; tüm sayfanın
+    yenilenmesinin sebebi buydu. Kümülatif çizgi bütçesi olmayan dönemlerde
+    sıfırlanmaz, kaldığı yerden devam eder.
     """
-    model_series = series_out.get(gap_model, {})
-    budget = series_out["budget"]
-    gap_points, cumulative = [], 0.0
-    for b in target_buckets:
-        c, g = model_series.get(b.id), budget.get(b.id)
-        if c is None or g is None:
-            gap_points.append({"label": b.label, "gap": None, "cumulative": None})
-            continue
-        d = divisor(b.id)
-        c, g = c / d, g / d
-        cumulative += c - g
-        gap_points.append({
-            "label": b.label,
-            "gap": round(c - g, 1),
-            "cumulative": round(cumulative, 1),
-            "pct": round((c / g - 1) * 100, 1) if g else None,
-        })
+    budget = gap_series.get("budget", {})
 
+    def points_for(code):
+        model_series = gap_series.get(code, {})
+        out, cumulative = [], 0.0
+        for b in target_buckets:
+            c, g = model_series.get(b.id), budget.get(b.id)
+            if c is None or g is None:
+                out.append({"label": b.label, "gap": None, "cumulative": None, "pct": None})
+                continue
+            d = divisor(b.id)
+            c, g = c / d, g / d
+            cumulative += c - g
+            out.append({
+                "label": b.label,
+                "gap": round(c - g, 1),
+                "cumulative": round(cumulative, 1),
+                "pct": round((c / g - 1) * 100, 1) if g else None,
+            })
+        return out
+
+    selected = q.selected_models()
     return [{
         "code": "budget_gap",
         "label": "Bütçe farkı",
         "kind": "bar_line",
-        "model": gap_model,
-        "model_label": MODEL_LABELS.get(gap_model, gap_model),
-        "points": gap_points,
+        "measure": GAP_MEASURE,
+        "model": q.selected_gap_model(),
+        "models": [
+            {"code": code, "label": MODEL_LABELS.get(code, code), "points": points_for(code)}
+            for code in selected
+        ],
     }]

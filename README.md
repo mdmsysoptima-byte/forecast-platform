@@ -53,14 +53,18 @@ satırlarını gösterir ve yalnızca satış katmanı düzenlenebilir.
 
 ## 2. Beş dakikada tur
 
-1. **Kokpit**: dört çerçeveli filtre kuşağı — Dönem (dönem sayısı ya da tarih aralığı),
-   Kapsam (boyut + alt kapsam), Model (çoklu seçim), Gösterim (ölçü, kova, toplam/ortalama).
-   **Model karşılaştırma** kartında grafik ve tablo birlikte: seçili modellerin her biri
-   bir çizgi ve bir satır, yanlarında sabit referanslar (gerçekleşen, bütçe, geçen yıl)
-   ve modelin belirsizlik bandı; dikey kesikli çizgi **bugünü** gösterir. Tablo adet ve
-   ciro için geçmiş/gelecek taşır. Altında **doğruluk ve bütçe farkı** tablosu, en altta
-   kendi model seçicisi olan **bütçe farkı** grafiği. Grafiğin üzerine gelince o dönemde
-   değeri olan her seri tek ipucunda listelenir.
+1. **Kokpit**: dört çerçeveli filtre kuşağı — Dönem (başlangıç + bitiş), Kapsam
+   (boyut + alt kapsam), Model (çip gösterimli çoklu seçim), Gösterim (zaman birimi,
+   toplam/ortalama). **Model karşılaştırma** kartında grafik ve tablo birlikte: seçili
+   modellerin her biri bir çizgi ve bir satır, yanlarında sabit referanslar
+   (gerçekleşen, bütçe, geçen yıl). İki dikey kesikli çizgi **bugünü** ve **donma
+   sınırını** gösterir; arası taralıdır — o dönemler çevrim tarafından kapatıldı,
+   genişliği `freeze_periods` ayarından gelir. Adet/Ciro düğmesi kartın kendi
+   başlığındadır ve yalnızca grafiği değiştirir; tablo ikisini de yan yana taşır.
+   Altında **doğruluk ve bütçe farkı** tablosu, en altta kendi model seçicisi olan
+   **bütçe farkı** grafiği — seçili modellerin tamamı tek yanıtta geldiği için o
+   seçiciyi değiştirmek sunucuya gitmez. Grafiğin üzerine gelince o dönemde değeri
+   olan her seri tek ipucunda listelenir.
 2. **Planlama > Tahmin grid'i**: soldan ağaçtan kapsam seçin, üst şeritten seviye ve kovayı
    değiştirin. Bir satırı açınca katman satırları gelir. Düzenlenebilir bir hücreye çift
    tıklayın, değeri yazın, gerekçe penceresi açılır. Üst seviyeden girilen değer alt
@@ -240,8 +244,10 @@ karşılığı:
 | 6 | 1.000 seri x 24 dönem grid 2 saniyenin altında yüklenir | `test_api_and_export.py::test_grid_performance_target` |
 | 7 | Excel'den geri yükleme fark listesi üretir ve onayla uygulanır; pharma.yaml ile yeni kurulum kod değişikliği olmadan ayağa kalkar | `test_api_and_export.py` |
 | Genel | Tüm uç noktalar OpenAPI'de belgeli ve yetki kontrollü; audit log her yazma işlemini kaydeder | `test_api_and_export.py`, `test_governance.py` |
-| Kokpit | Geçmişe tahmin, geleceğe gerçekleşen sızmaz; iki pencere modu aynı aralığı aynı sayıyla anlatır; çeyrek ve yıl toplamı aylık toplama eşittir; model bandı istatistiksel çizgiyi sarar; ciro = adet x fiyat; satış katkıcısı yalnızca kendi kapsamını görür | `test_cockpit.py` |
-| Kokpit tablosu | Gerçekleşenin geleceği boştur; MAPE ile Analiz ekranındaki aynı sayıdır; kapsam daralınca MAPE de daralır; model seçimi tablo, grafik ve doğruluk tablosunu birlikte sürer; seçili olmayan modelin bandı çizilmez; ortalama modu toplamı dönem sayısına böler ve grafiğe de uygular | `test_cockpit.py` |
+| Kokpit | Geçmişe tahmin, geleceğe gerçekleşen sızmaz; iki uç pencereyi belirler, ters verilirse düzeltilir, takvim dışı etiket varsayılana düşer; çeyrek ve yıl toplamı aylık toplama eşittir; ciro = adet x fiyat; satış katkıcısı yalnızca kendi kapsamını görür | `test_cockpit.py` |
+| Kokpit tablosu | Gerçekleşenin geleceği boştur; MAPE ile Analiz ekranındaki aynı sayıdır; kapsam daralınca MAPE de daralır; model seçimi tablo, grafik ve doğruluk tablosunu birlikte sürer; ortalama modu toplamı dönem sayısına böler ve grafiğe de uygular | `test_cockpit.py` |
+| Donma bölgesi | Sınır `freeze_periods` ayarından gelir, ekrana sabit yazılmaz; iri kovada donma dönemleri tek kovaya düşerse sınır geri gitmez | `test_cockpit.py` |
+| Bütçe farkı | Seçili modellerin tamamı tek yanıtta döner, model değiştirmek sunucuya gitmez; ölçü ne olursa olsun adet üzerinden okunur; pencerenin tamamına oturur, bütçesiz dönemler boş gelir | `test_cockpit.py` |
 
 Demo ortamında ölçülen değerler: 200 seri çalıştırma 1,6 ile 2,5 saniye; temel seviye
 grid sorgusu (200 satır x 30 dönem) 170 ms civarı; demo yüklemesi uçtan uca 8 saniye.
@@ -279,13 +285,18 @@ uyarınca alınan kararlar ve bu sürümde bilinçli olarak farklı yapılan nok
    yalnızca sınıf yapısı kullanılıyor, etkileşim bizim JS'imizde. Tema sürümü 3.6.0,
    lisans MIT (Colorlib, ThemeWagon); kopya `vendor/METIS-LICENSE.md` dosyasında.
 7. **Elle yazılmış SVG grafikler yerine ApexCharts.** Temanın kendi grafik kütüphanesi.
-   Current period çizgisi `annotations.xaxis`, bütçe ve geçen yıl `stroke.dashArray`,
-   model belirsizlik bandı `rangeArea` ile çizilir. Tema canlı tema değişiminde
-   grafikleri yeniden renklendirmediği için tema düğmesi ekranı yeniden çizer.
-   Bileşik grafikte `rangeArea` varken ApexCharts iki değerli biçimlendiricisini
-   bütün serilere uyguluyor ve çizgi değerleri `undefined` dönüyor; bu yüzden tahmin
-   grafiğinin ipucu `tooltip.custom` ile elle üretilir ve yalnızca o dönemde değeri
-   olan seriler listelenir.
+   Bugün ve donma sınırı `annotations.xaxis`, bütçe ve geçen yıl `stroke.dashArray`
+   ile çizilir. Tema canlı tema değişiminde grafikleri yeniden renklendirmediği için
+   tema düğmesi ekranı yeniden çizer. Tahmin grafiğinin ipucu `tooltip.custom` ile
+   elle üretilir ve yalnızca o dönemde değeri olan seriler listelenir.
+
+   **Donma taraması iki yerde ApexCharts'ı aşıyor.** Bölge annotation'ı yalnızca düz
+   dolgu kabul ediyor, desen seçeneği yok: tarama bir SVG `<pattern>` olarak tanımlanıp
+   dikdörtgenin dolgusuna bağlanıyor. İkincisi, Apex annotation grubunu seri grubundan
+   sonra yazıyor ve SVG'de z-index olmadığı için tarama veri çizgilerinin üstünde
+   kalıyordu; dikdörtgen çizimden sonra ızgaranın önüne taşınıyor. Grubun transform'u
+   olmadığı için koordinatlar değişmiyor. Bölge dar olduğundan üzerine etiket
+   sığmıyor — "donma · N dönem" açıklaması göstergede, taralı bir rozetle duruyor.
 8. **Kokpitte operasyonel liste yok.** Spesifikasyonun bölüm 11 ve 12'de kokpite
    koyduğu maddeler kendi ekranlarında yaşıyor: uyarılar Planlama > İstisnalar,
    çalıştırmalar Senaryo > Çalıştırma geçmişi, onay izi Versiyon, lag ayrıntısı ve

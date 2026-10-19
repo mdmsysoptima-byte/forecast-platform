@@ -19,6 +19,8 @@ export function categorical(count) {
 export const axisInk = () => (isDark() ? "#a1a1aa" : "#71717a");
 export const gridLine = () => (isDark() ? "#27272a" : "#e4e4e7");
 export const surfacePanel = () => (isDark() ? "#18181b" : "#ffffff");
+// Donma taramasi planlama grid'indeki donma hucresiyle ayni dili konusur.
+export const primaryInk = () => (isDark() ? "#60a5fa" : "#2563eb");
 
 /** Provenance colours: what produced the number decides its hue. */
 export const PROVENANCE = {
@@ -150,8 +152,9 @@ const pick = (pair, fallback) => (pair ? pair[isDark() ? 1 : 0] : fallback);
 export const MODEL_COLOR = (code) => pick(MODEL_COLORS[code], null);
 
 export function forecastChart(el, {
-  labels, models = [], actual, budget, lastYear, lower, upper,
-  currentLabel, height = 340, unit = "", showBand = true, legendHost = null,
+  labels, models = [], actual, budget, lastYear,
+  currentLabel, freezeLabel, freezePeriods = 0,
+  height = 340, unit = "", legendHost = null,
 }) {
   const point = (arr) => labels.map((x, i) => ({ x, y: arr ? arr[i] : null }));
   const lastActual = (actual || []).reduce(
@@ -168,10 +171,6 @@ export function forecastChart(el, {
   // Çizim sırası arkadan öne: referanslar, sonra modeller, en üstte
   // gerçekleşen. Geçmişte modeller gerçekleşene çok yakın seyrediyor; en sona
   // yazılmazsa altta kalıp kayboluyor.
-  if (showBand && lower && upper && lower.some((v) => v !== null)) {
-    add("Model aralığı", labels.map((x, i) => ({ x, y: [lower[i], upper[i]] })),
-      pick(MODEL_COLORS.statistical), 0, 0, "rangeArea");
-  }
   if (budget && budget.some((v) => v !== null)) {
     add("Bütçe", point(budget), pick(REFERENCE_COLORS["Bütçe"]), 6, 1.75);
   }
@@ -202,10 +201,6 @@ export function forecastChart(el, {
     colors,
     legend: { show: false },
     stroke: { curve: "smooth", width: widths, dashArray: dash },
-    fill: {
-      type: series.map((s) => (s.name === "Model aralığı" ? "solid" : "solid")),
-      opacity: series.map((s) => (s.name === "Model aralığı" ? 0.14 : 1)),
-    },
     markers: { size: 0, hover: { size: 4 } },
     xaxis: {
       type: "category",
@@ -221,19 +216,7 @@ export function forecastChart(el, {
       labels: { formatter: compact, style: { colors: axisInk(), fontSize: "11px" } },
       forceNiceScale: true,
     },
-    annotations: currentLabel ? {
-      xaxis: [{
-        x: currentLabel,
-        borderColor: axisInk(),
-        strokeDashArray: 4,
-        label: {
-          text: "bugün",
-          position: "top",
-          orientation: "horizontal",
-          style: { fontSize: "10px", color: axisInk(), background: surfacePanel() },
-        },
-      }],
-    } : {},
+    annotations: { xaxis: freezeAnnotations(currentLabel, freezeLabel, freezePeriods) },
     tooltip: {
       shared: true,
       intersect: false,
@@ -248,21 +231,119 @@ export function forecastChart(el, {
     ],
   });
 
+  const frozen = freezeLabel && freezeLabel !== currentLabel;
+  if (frozen) hatchFreezeZone(el);
+
   if (legendHost) {
-    buildLegend(legendHost, chart, meta.map((m) => ({
+    const entries = meta.map((m) => ({
       name: m.name, color: m.color, dashed: m.dash > 0, band: m.band,
-    })));
+    }));
+    // Donma bolgesi bir seri degil; gostergede yer alir ama tiklanamaz.
+    if (frozen) {
+      entries.push({
+        name: freezePeriods ? `Donma · ${freezePeriods} dönem` : "Donma",
+        color: primaryInk(), hatch: true, static: true,
+      });
+    }
+    buildLegend(legendHost, chart, entries);
   }
   return chart;
+}
+
+/* Donma penceresi: bugün ile donma sonu arasındaki dönemler çevrim tarafından
+   kapatıldı, kimse değiştiremez. İki kesik çizgi sınırı, aralarındaki tarama
+   bölgenin kendisini anlatır. Renk planlama grid'indeki donma hücresiyle aynı
+   (primary, düşük opaklık); amber bu projede insan override'ına ait. */
+function freezeAnnotations(currentLabel, freezeLabel, freezePeriods) {
+  if (!currentLabel) return [];
+  const edge = {
+    borderColor: axisInk(),
+    strokeDashArray: 4,
+    label: {
+      text: "bugün", position: "top", orientation: "horizontal",
+      style: { fontSize: "10px", color: axisInk(), background: surfacePanel() },
+    },
+  };
+  if (!freezeLabel || freezeLabel === currentLabel) return [{ x: currentLabel, ...edge }];
+
+  // Bolge dar oldugu icin ustune ikinci bir etiket sigmiyor: iki etiket ayni
+  // noktada ust uste biniyordu. Donma aciklamasi gostergeye tasindi, grafikte
+  // yalnizca sinirlar ve tarama kaliyor.
+  return [
+    // Dolgu ayri bir annotation: Apex x/x2 verilince cizgiyi degil alani cizer.
+    { x: currentLabel, x2: freezeLabel, fillColor: primaryInk(), opacity: 0.07, borderColor: "transparent" },
+    { x: currentLabel, ...edge },
+    { x: freezeLabel, borderColor: axisInk(), strokeDashArray: 4 },
+  ];
+}
+
+/* Apex bolge annotation'ini duz dolgu ciziyor, desen secenegi yok. Taramayi
+   SVG pattern olarak tanimlayip dikdortgenin dolgusunu ona cevirmek gerekiyor.
+   Veri cizgilerinin altinda kalir: annotation grubu zaten seri grubundan once. */
+function hatchFreezeZone(host) {
+  requestAnimationFrame(() => {
+    const svg = host.querySelector(".apexcharts-svg");
+    // Apex bolge annotation'ina kendi sinifini vermiyor; tek bolge var, onu
+    // dolgu rengiyle ayirt ediyoruz.
+    const rect = host.querySelector(".apexcharts-xaxis-annotations rect.apexcharts-annotation-rect");
+    if (!svg || !rect) return;
+    const id = `freeze-hatch-${Math.random().toString(36).slice(2, 8)}`;
+    const ns = "http://www.w3.org/2000/svg";
+    let defs = svg.querySelector("defs");
+    if (!defs) {
+      defs = document.createElementNS(ns, "defs");
+      svg.prepend(defs);
+    }
+    const pattern = document.createElementNS(ns, "pattern");
+    pattern.setAttribute("id", id);
+    pattern.setAttribute("width", "6");
+    pattern.setAttribute("height", "6");
+    pattern.setAttribute("patternUnits", "userSpaceOnUse");
+    pattern.setAttribute("patternTransform", "rotate(45)");
+    // Once soluk bir zemin: alan bir bakista bolge olarak okunsun. Uzerine
+    // tarama; cizgiler veri cizgileriyle yarismayacak kadar ince ve seyrek.
+    const back = document.createElementNS(ns, "rect");
+    back.setAttribute("width", "6");
+    back.setAttribute("height", "6");
+    back.setAttribute("fill", primaryInk());
+    back.setAttribute("fill-opacity", "0.07");
+    const line = document.createElementNS(ns, "line");
+    line.setAttribute("x1", "0");
+    line.setAttribute("y1", "0");
+    line.setAttribute("x2", "0");
+    line.setAttribute("y2", "6");
+    line.setAttribute("stroke", primaryInk());
+    line.setAttribute("stroke-width", "1.5");
+    line.setAttribute("stroke-opacity", "0.4");
+    pattern.append(back, line);
+    defs.append(pattern);
+    rect.setAttribute("fill", `url(#${id})`);
+    rect.setAttribute("fill-opacity", "1");
+    // Apex bolgeye kendi opaklığını yaziyor; desen zaten soluk, ustune bir de
+    // 0.07 ile carpilinca hic gorunmuyordu.
+    rect.setAttribute("opacity", "1");
+
+    /* SVG'de z-index yok, sira cizim sirasidir. Apex annotation grubunu
+       serilerden sonra yaziyor, bu yuzden tarama veri cizgilerinin ustunde
+       kaliyordu. Dikdortgeni izgaranin oncesine tasiyoruz: ayni ebeveyn, ayni
+       koordinat sistemi (grubun transform'u yok), yalnizca sira degisir.
+       Kesik sinir cizgileri ve "bugün" etiketi ustte kalmali, onlara
+       dokunmuyoruz. */
+    const inner = host.querySelector(".apexcharts-inner");
+    const grid = inner && inner.querySelector(".apexcharts-grid");
+    if (inner && grid && rect.parentNode.parentNode === inner) {
+      inner.insertBefore(rect, grid);
+    }
+  });
 }
 
 /* Çizim sırası arkadan öne, okuma sırası ise önemden önemsize. Modeller
    aralarındaki sırayı korur; gerçekleşen başta, referanslar sonda. */
 function legendRank(name) {
   if (name === "Gerçekleşen") return 0;
-  if (name === "Model aralığı") return 90;
   if (name === "Bütçe") return 91;
   if (name === "Geçen yıl") return 92;
+  if (name.startsWith("Donma")) return 95;
   const n = /^Model (\d+)$/.exec(name);
   return n ? Number(n[1]) : 50;
 }
@@ -274,16 +355,20 @@ function buildLegend(host, chart, entries) {
   const ranked = [...entries].sort((a, b) => legendRank(a.name) - legendRank(b.name));
   for (const e of ranked) {
     const swatch = document.createElement("span");
-    swatch.className = `chart-legend-mark${e.dashed ? " dashed" : ""}${e.band ? " band" : ""}`;
+    swatch.className = `chart-legend-mark${e.dashed ? " dashed" : ""}`
+      + `${e.band ? " band" : ""}${e.hatch ? " hatch" : ""}`;
     swatch.style.setProperty("--mark", e.color);
-    const item = document.createElement("button");
-    item.type = "button";
-    item.className = "chart-legend-item";
+    // Donma gibi seri olmayan girdiler yalnizca anlatir, gizlenemez.
+    const item = document.createElement(e.static ? "span" : "button");
+    item.className = `chart-legend-item${e.static ? " static" : ""}`;
+    if (!e.static) {
+      item.type = "button";
+      item.onclick = () => {
+        item.classList.toggle("off");
+        try { chart.toggleSeries(e.name); } catch { /* chart gone */ }
+      };
+    }
     item.append(swatch, document.createTextNode(e.name));
-    item.onclick = () => {
-      item.classList.toggle("off");
-      try { chart.toggleSeries(e.name); } catch { /* chart gone */ }
-    };
     host.append(item);
   }
 }

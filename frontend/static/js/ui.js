@@ -159,6 +159,67 @@ export function select(options, value, onChange, attrs = {}) {
   return node;
 }
 
+/**
+ * Çoklu seçim: kapalıyken seçilenleri çip olarak gösterir, açılınca işaretlenir.
+ *
+ * Checkbox listesi her seçeneği aynı anda ekranda tutuyordu; dört model için
+ * dört satır, filtre çubuğunun yarısı. Burada kapalı hal seçimin kendisini
+ * söyler, liste yalnızca değiştirirken açılır.
+ *
+ * `minOne` ile son seçenek işareti kaldırılamaz — karşılaştıracak bir şey
+ * kalmayan ekran boş bir grafikten ibaret olurdu.
+ */
+export function multiSelect(options, values, onChange, { minOne = true, placeholder = "Seçin", label = "" } = {}) {
+  const wrap = el("div", { class: "dropdown multi-select" });
+  const toggle = el("button", {
+    type: "button", class: "form-select form-select-sm text-start multi-select-toggle",
+    "data-bs-toggle": "dropdown", "data-bs-auto-close": "outside",
+    "aria-expanded": "false", "aria-label": label || placeholder,
+  });
+  const menu = el("div", { class: "dropdown-menu p-2 multi-select-menu" });
+
+  const paint = () => {
+    clear(toggle);
+    const picked = options.filter((o) => values.includes(o.value));
+    if (!picked.length) {
+      toggle.append(el("span", { class: "text-muted", text: placeholder }));
+      return;
+    }
+    toggle.append(el("span", { class: "d-inline-flex flex-wrap gap-1 align-middle" },
+      picked.map((o) => el("span", {
+        class: "chip", title: o.title || o.label,
+      }, [
+        o.color ? el("span", { class: "legend-dot", style: `background:${o.color}` }) : null,
+        el("span", { text: o.label }),
+      ]))));
+  };
+
+  for (const o of options) {
+    const id = `ms-${Math.random().toString(36).slice(2, 8)}`;
+    const input = el("input", { type: "checkbox", class: "form-check-input mt-0", id });
+    input.checked = values.includes(o.value);
+    input.addEventListener("change", () => {
+      const next = input.checked
+        ? [...values, o.value]
+        : values.filter((v) => v !== o.value);
+      if (minOne && !next.length) { input.checked = true; return; }
+      onChange(next);
+    });
+    menu.append(el("label", {
+      class: "dropdown-item d-flex align-items-center gap-2 rounded", for: id,
+      title: o.title || "",
+    }, [
+      input,
+      o.color ? el("span", { class: "legend-dot", style: `background:${o.color}` }) : null,
+      el("span", { class: "small", text: o.label }),
+    ]));
+  }
+
+  paint();
+  wrap.append(toggle, menu);
+  return wrap;
+}
+
 /** Radio backed segmented control, the theme's own pattern for ranges. */
 export function segmented(name, options, value, onChange) {
   const group = el("div", { class: "btn-group btn-group-sm segmented", role: "group" });

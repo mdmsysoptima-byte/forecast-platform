@@ -61,10 +61,9 @@
     return value;
   }
 
-  /* Kokpit yanıtı her model için satır ve seri taşıyor, bu yüzden model
-     seçimini burada süzmek yeterli — her alt küme için ayrı dosya tutmaya
-     gerek yok. Belirsizlik bandı modelin ham çıktısına ait; o model seçili
-     değilse band da düşer. */
+  /* Kokpit yanıtı her model için satır, seri ve bütçe farkı taşıyor; model
+     seçimini burada süzmek yeterli, her alt küme için ayrı dosya tutmaya gerek
+     yok. Yakalama dört modelin hepsiyle yapılır, süzme hep daraltır. */
   function filterModels(body, wanted) {
     if (!body || !Array.isArray(wanted) || !wanted.length) return body;
     const keep = new Set(wanted);
@@ -74,12 +73,21 @@
       out.table.rows = out.table.rows.filter((r) => r.code === "actual" || keep.has(r.code));
     }
     if (out.accuracy?.rows) out.accuracy.rows = out.accuracy.rows.filter((r) => keep.has(r.code));
-    if (out.timeline?.series && !keep.has("statistical")) {
-      const n = (out.timeline.series.lower || []).length;
-      out.timeline.series.lower = new Array(n).fill(null);
-      out.timeline.series.upper = new Array(n).fill(null);
+    // Butce farki seciciye yalnizca secili modelleri sunmali; gosterilen model
+    // listeden dustuyse ilkine kayar.
+    for (const chart of out.charts || []) {
+      if (!chart.models) continue;
+      chart.models = chart.models.filter((m) => keep.has(m.code));
+      if (!chart.models.some((m) => m.code === chart.model)) {
+        chart.model = chart.models[0] ? chart.models[0].code : chart.model;
+      }
     }
-    if (out.meta) out.meta.models = wanted.filter((c) => keep.has(c));
+    if (out.meta) {
+      out.meta.models = wanted.filter((c) => keep.has(c));
+      if (!keep.has(out.meta.gap_model)) {
+        out.meta.gap_model = out.meta.models[out.meta.models.length - 1];
+      }
+    }
     return out;
   }
 
@@ -130,10 +138,6 @@
          yapıp en özelden en genele doğru deniyoruz. */
       if (path === "/api/v1/cockpit/overview" && body) {
         const ALL_MODELS = ["consensus", "planner", "sales", "statistical"];
-        const win = {
-          history_periods: body.history_periods ?? 12,
-          horizon_periods: body.horizon_periods ?? 18,
-        };
         const base = {
           aggregate: body.aggregate ?? "total",
           gap_model: body.gap_model ?? "consensus",
@@ -141,25 +145,22 @@
           measure: body.measure ?? "units",
           models: ALL_MODELS,
         };
-        const DEFAULT_WIN = { history_periods: 12, horizon_periods: 18 };
+        const win = { start_label: body.start_label ?? null, end_label: body.end_label ?? null };
+        const EMPTY_WIN = { start_label: null, end_label: null };
         const hasScope = body.scope && Object.keys(body.scope).length;
-        const isRange = body.window_mode === "range" && body.start_label && body.end_label;
 
-        // En ozelden en genele. Pencere en sonda gevsetilir, cunku on yuz
-        // pencere alanlarini her zaman gonderiyor; once gelseydi olcu ve kova
-        // secimleri hic etki etmezdi.
+        /* En ozelden en genele. Pencere en sonda gevsetilir: on yuz ilk
+           yanittan sonra uclari her istekte tasiyor, once gelseydi olcu ve
+           zaman birimi secimleri hic etki etmezdi. */
         const tries = [];
-        if (isRange) {
-          tries.push({ ...base, window_mode: "range",
-            start_label: body.start_label, end_label: body.end_label });
-          tries.push({ ...base, gap_model: "consensus", measure: "units", aggregate: "total",
-            window_mode: "range", start_label: body.start_label, end_label: body.end_label });
-        }
         if (hasScope) tries.push({ ...base, ...win, scope: body.scope });
-        if (hasScope) tries.push({ ...base, ...DEFAULT_WIN, scope: body.scope });
+        if (hasScope) tries.push({ ...base, ...EMPTY_WIN, scope: body.scope });
         tries.push({ ...base, ...win });
-        tries.push({ ...base, ...DEFAULT_WIN });
-        tries.push({ ...base, ...win, measure: "units", grain: "month",
+        tries.push({ ...base, ...EMPTY_WIN });
+        // Pencere varyantlari yalnizca varsayilan olculerle yakalandi.
+        tries.push({ ...base, ...win, measure: "units", grain: body.grain ?? "month",
+          aggregate: "total", gap_model: "consensus" });
+        tries.push({ ...base, ...EMPTY_WIN, measure: "units", grain: "month",
           aggregate: "total", gap_model: "consensus" });
         for (const candidate of tries) {
           const k = `${method} ${path} ${stable(candidate)}`;

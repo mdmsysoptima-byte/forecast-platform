@@ -51,7 +51,10 @@ python -m http.server 8090
 
 - **Yazma yok.** Hücre düzenleme, senaryo çalıştırma, onay, Excel içe/dışa
   aktarma çalışmaz; arayüz "değişiklik kaydedilmedi" der.
-- **Filtreler yakalanan kombinasyonlarla sınırlı.** Ölçü, kova,
+- **Pencerede tek uç değiştirmek tam çalışır.** Her başlangıç x varsayılan bitiş ve
+  varsayılan başlangıç x her bitiş yakalandı. İki ucu birden değiştirirseniz en
+  yakın yakalanmış aralığa düşer.
+- **Filtreler yakalanan kombinasyonlarla sınırlı.** Ölçü, zaman birimi,
   toplam/ortalama, model seçimi, bütçe modeli, dönem pencereleri, kapsam ve
   yaygın tarih aralıkları yakalandı. Dışına çıkan bir kombinasyon en yakın
   yanıta düşer ve konsola `[mock] tam eslesme yok` notu yazar.

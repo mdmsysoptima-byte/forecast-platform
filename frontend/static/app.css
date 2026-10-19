@@ -168,11 +168,23 @@ body.assistant-open .admin-footer { margin-right: 340px; }
   font-size: .75rem; color: var(--ink-secondary);
 }
 .chart-legend-item.off { opacity: .4; text-decoration: line-through; }
+/* Donma gibi seri olmayan girdiler tiklanamaz: imlec de bunu soylemeli. */
+.chart-legend-item.static { cursor: default; }
 .chart-legend-mark { width: 18px; height: 0; border-top: 2.5px solid var(--mark); display: inline-block; }
 .chart-legend-mark.dashed { border-top-style: dashed; }
 .chart-legend-mark.band {
   height: 9px; border-top: 0; border-radius: 2px;
   background: color-mix(in srgb, var(--mark) 25%, transparent);
+}
+/* Grafikteki taramanin birebir karsiligi: ayni aci, ayni renk. */
+.chart-legend-mark.hatch {
+  height: 10px; border-top: 0; border-radius: 2px;
+  border: 1px solid color-mix(in srgb, var(--mark) 35%, transparent);
+  background-image: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--mark) 55%, transparent) 0 1.5px,
+    transparent 1.5px 4.5px
+  );
 }
 /* Karsilastirma tablosunda satirin kokenini gosteren nokta: grafiklerle ayni
    renk sozlugu, boylece tablo ile grafik ayni dili konusur. */
@@ -180,9 +192,32 @@ body.assistant-open .admin-footer { margin-right: 340px; }
   width: 8px; height: 8px; border-radius: 50%;
   display: inline-block; flex: 0 0 8px;
 }
-.band-note { font-size: .6875rem; color: var(--ink-muted); }
-
 .segmented .btn { font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------- coklu secim */
+/* Kapali hal secimin kendisini soyler: secili modeller cip olarak durur.
+   Acilir liste yalnizca degistirirken gorunur, filtre cubugu dort satir
+   checkbox tasimaz. */
+.multi-select { min-width: 190px; }
+.multi-select-toggle {
+  display: flex; align-items: center; gap: .25rem;
+  min-height: 31px; height: auto; padding-top: .2rem; padding-bottom: .2rem;
+}
+.multi-select-toggle:focus-visible {
+  outline: 2px solid var(--bs-primary); outline-offset: 1px;
+}
+.multi-select-menu { min-width: 100%; }
+.multi-select-menu .dropdown-item { cursor: pointer; }
+.chip {
+  display: inline-flex; align-items: center; gap: .3rem;
+  padding: .05rem .4rem; border-radius: 999px;
+  background: var(--surface-sunken); border: 1px solid var(--bs-border-color);
+  font-size: .75rem; line-height: 1.4; white-space: nowrap;
+}
+
+/* Donma bolgesi grafikte: tarama SVG pattern olarak cizilir, etiketi burada
+   sessiz kalir ki veri cizgileriyle yarismasin. */
+.apexcharts-xaxis-annotations .freeze-zone text { opacity: .75; }
 
 /* ---------------------------------------------------------------- grid */
 .fgrid-scroll { overflow: auto; max-height: calc(100vh - 420px); }

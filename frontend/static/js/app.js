@@ -35,11 +35,8 @@ export const state = {
   cockpit: {
     measure: "units",
     grain: "month",
-    // Pencere iki uc nokta; windowMode yalnizca ifade bicimini degistirir.
-    windowMode: "periods",
-    // Ekranın ağırlığı tahminde olmalı: geçmiş en fazla ufuk kadar uzun.
-    horizon: 18,
-    history: 12,
+    // Pencere iki donem etiketi. Bos birakilinca sunucu mevcut donemin
+    // etrafinda varsayilan pencereyi kurar ve uclari geri yazar.
     startLabel: null,
     endLabel: null,
     // Karsilastirilan modeller; tablo satirlari ve grafik cizgileri bu secim.

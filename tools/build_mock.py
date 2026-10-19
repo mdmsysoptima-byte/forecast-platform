@@ -94,34 +94,21 @@ def request_key(method: str, path: str, body=None) -> str:
     return f"{method} {path}" if body is None else f"{method} {path} {stable(body)}"
 
 
-DEFAULT_HISTORY = 12
-DEFAULT_HORIZON = 18
-
-
-def cockpit_range_body(start: str, end: str, measure="units", grain="month",
-                       aggregate="total", gap="consensus") -> dict:
-    """Tarih aralığı modunun kanonik hali. Pencere alanları yerine iki etiket."""
-    return {"aggregate": aggregate, "end_label": end, "gap_model": gap, "grain": grain,
-            "measure": measure, "models": sorted(MODELS), "start_label": start,
-            "window_mode": "range"}
-
-
 def cockpit_body(measure="units", grain="month", aggregate="total", gap="consensus",
-                 scope=None, hist=DEFAULT_HISTORY, hor=DEFAULT_HORIZON) -> dict:
+                 scope=None, start=None, end=None) -> dict:
     """Kokpit gövdesinin kanonik hali.
 
-    Tarayıcı gövdeyi çok daha fazla alanla gönderiyor (pencere modu, etiketler,
-    görünüm, para birimi), bu yüzden tam eşleşme hiç tutmaz. mock-api.js aynı
-    sadeleştirmeyi yapıp bu anahtarı üretir; iki taraf da burada tanımlı şekle
-    uymak zorunda.
+    Tarayıcı gövdeyi daha fazla alanla gönderiyor (görünüm, para birimi), bu
+    yüzden tam eşleşme hiç tutmaz. mock-api.js aynı sadeleştirmeyi yapıp bu
+    anahtarı üretir; iki taraf da burada tanımlı şekle uymak zorunda.
 
-    Pencere alanları hep var: ön yüz bunları her istekte gönderiyor, opsiyonel
-    bırakılırsa pencere dalı ölçü ve kova dallarının önüne geçip her seçimi
-    aynı yanıta düşürüyor. models sıralı, çünkü dizi sırası anahtarın parçası.
+    Pencere iki etiketten ibaret. İlk açılışta ön yüz ikisini de boş gönderir
+    ve sunucunun kurduğu varsayılanı devralır; o yüzden hem boş hal hem de
+    varsayılan uçlar yakalanır. models sıralı, çünkü dizi sırası anahtarın
+    parçası.
     """
-    body = {"aggregate": aggregate, "gap_model": gap, "grain": grain,
-            "history_periods": hist, "horizon_periods": hor,
-            "measure": measure, "models": sorted(MODELS)}
+    body = {"aggregate": aggregate, "end_label": end, "gap_model": gap, "grain": grain,
+            "measure": measure, "models": sorted(MODELS), "start_label": start}
     if scope is not None:
         body["scope"] = scope
     return body
@@ -162,29 +149,44 @@ def capture_all(cap: Capture) -> None:
         for node in s["nodes"][:3]:
             scopes.append((s["dimension"], node["node_id"]))
 
+    # Varsayilan pencerenin uclari: on yuz ilk istekte bos gonderip bunlari
+    # devraliyor, sonraki her istek bu etiketleri tasiyor.
+    meta = cockpit_probe.get("meta", {})
+    d_start, d_end = meta.get("start_label"), meta.get("end_label")
+
     for measure in MEASURES:
         for grain in GRAINS:
             for aggregate in AGGREGATES:
                 for gap in MODELS:
-                    cap.post("/api/v1/cockpit/overview",
-                             cockpit_body(measure=measure, grain=grain, aggregate=aggregate, gap=gap))
-    # Pencere varyantlari
-    for hist, hor in ((6, 6), (6, 12), (12, 12), (12, 18), (18, 18)):
-        cap.post("/api/v1/cockpit/overview", cockpit_body(hist=hist, hor=hor))
+                    for start, end in ((None, None), (d_start, d_end)):
+                        cap.post("/api/v1/cockpit/overview",
+                                 cockpit_body(measure=measure, grain=grain, aggregate=aggregate,
+                                              gap=gap, start=start, end=end))
     # Kapsam varyantlari, iki olcude birden
     for dim, node in scopes:
         scope = {dim: {"nodes": [node] if node else []}}
         for measure in MEASURES:
-            cap.post("/api/v1/cockpit/overview", cockpit_body(measure=measure, scope=scope))
+            for start, end in ((None, None), (d_start, d_end)):
+                cap.post("/api/v1/cockpit/overview",
+                         cockpit_body(measure=measure, scope=scope, start=start, end=end))
 
-    # Tarih araligi: takvimden esit arali capalar secilip butun ileri yonlu
-    # ciftler yakalanir. Hepsi degil ama secicinin sundugu makul araliklar.
+    # Pencere varyantlari.
+    #
+    # Kullanici uclari tek tek degistiriyor: once baslangic, sonra bitis. Bu
+    # yuzden "her baslangic x varsayilan bitis" ve "varsayilan baslangic x her
+    # bitis" taranir — tek bir degisiklik her zaman tam eslesir. Capa ciftleri
+    # ise ikisini birden degistiren durumu kabaca karsilar; tum ciftler
+    # (60x60) yakalanamazdi.
     periods = [p["label"] for p in cockpit_probe.get("options", {}).get("periods", [])]
-    anchors = periods[::max(1, len(periods) // 6)][:7] if periods else []
+    for label in periods:
+        cap.post("/api/v1/cockpit/overview", cockpit_body(start=label, end=d_end))
+        cap.post("/api/v1/cockpit/overview", cockpit_body(start=d_start, end=label))
+    anchors = periods[::max(1, len(periods) // 8)][:9] if periods else []
     for i, start in enumerate(anchors):
         for end in anchors[i + 1:]:
             for grain in GRAINS:
-                cap.post("/api/v1/cockpit/overview", cockpit_range_body(start, end, grain=grain))
+                cap.post("/api/v1/cockpit/overview",
+                         cockpit_body(start=start, end=end, grain=grain))
 
     # --- planlama grid'i
     layer_codes = ["actual", "last_year", "statistical", "sales", "planner", "consensus", "budget"]
