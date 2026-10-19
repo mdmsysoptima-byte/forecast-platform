@@ -78,6 +78,11 @@ satırlarını gösterir ve yalnızca satış katmanı düzenlenebilir.
 6. **Rapor**: 12 standart rapor, Excel, CSV, Parquet, REST API durumu.
 7. **Yönetim**: bağlantılar, model kayıtları, takvim, boyut doğrulaması, sürücü kataloğu,
    konsensüs kuralı, kullanıcı ve satır yetkisi, audit log.
+8. **v2**: alternatif bir arayüz yönü. Dışarıdan gelen bağımsız bir HTML prototipi,
+   bir iframe içinde, kendi tasarımı ve kendi gömülü verisiyle çalışır — v1 ile
+   hiçbir şey paylaşmaz. Dosyaya dokunulmadı; bilinen kusurları ve neden iframe
+   kullanıldığı [`frontend/static/v2/README.md`](frontend/static/v2/README.md)
+   dosyasında.
 
 ---
 

@@ -11,6 +11,7 @@ import { render as renderVersions } from "./views/versions.js";
 import { render as renderAnalysis } from "./views/analysis.js";
 import { render as renderReports } from "./views/reports.js";
 import { render as renderAdmin } from "./views/admin.js";
+import { render as renderV2 } from "./views/v2.js";
 
 export const state = {
   user: null,
@@ -99,6 +100,20 @@ const AREAS = [
       { id: "rules", hash: "#/admin/rules", label: "Katman kuralları", icon: "stack" },
       { id: "users", hash: "#/admin/users", label: "Kullanıcı ve roller", icon: "people" },
       { id: "audit", hash: "#/admin/audit", label: "Audit log", icon: "journal-text" },
+    ],
+  },
+  // Alternatif arayuz yonu, bagimsiz bir prototip olarak iframe icinde.
+  // Kendi verisiyle calisir, v1 ile hicbir sey paylasmaz.
+  {
+    id: "v2", label: "v2", icon: "window", render: renderV2,
+    sub: "Alternatif arayüz prototipi",
+    children: [
+      { id: "kokpit", hash: "#/v2/kokpit", label: "Kokpit", icon: "speedometer2" },
+      { id: "tahminler", hash: "#/v2/tahminler", label: "Tahminler", icon: "table" },
+      { id: "karsilastir", hash: "#/v2/karsilastir", label: "Karşılaştır", icon: "arrow-left-right" },
+      { id: "dogruluk", hash: "#/v2/dogruluk", label: "Doğruluk", icon: "bullseye" },
+      { id: "raporlar", hash: "#/v2/raporlar", label: "Raporlar", icon: "file-earmark-text" },
+      { id: "yonetim", hash: "#/v2/yonetim", label: "Yönetim", icon: "gear" },
     ],
   },
 ];

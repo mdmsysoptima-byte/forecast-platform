@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Forecast Platformu, prototip</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#f4f5f7; --panel:#ffffff; --ink:#1f2328; --mute:#5b6470; --line:#e1e4e9; --line2:#eef0f3;
+  --soft:#f7f8fa; --nav-on:#e8eef8; --nav-on-ink:#0b4a94; --accent:#1f2328; --accent-ink:#ffffff;
+  --past:#f1f3f5; --frz:#edf2fa; --frz-line:#9db7e4; --ovr:#fff4cc; --warn-bg:#fff8e6; --warn-line:#f0d58a; --warn-ink:#6b4e00;
+  --good:#15803d; --bad:#b91c1c; --amber:#b45309; --link:#0b4a94;
+  --p-model-bg:#dbe8fb; --p-model:#0b4a94; --p-man-bg:#e3f1e6; --p-man:#1d6b32; --p-tur-bg:#efe4f8; --p-tur:#5f2d8a; --p-yuk-bg:#e9ecf0; --p-yuk:#454c57; --p-sen-bg:#fde9d6; --p-sen:#8a4a0f;
+  --shadow:0 8px 30px rgba(20,24,30,.18);
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  color-scheme:dark;
+  --bg:#15181d; --panel:#1d2128; --ink:#e7eaef; --mute:#9aa3ae; --line:#2e343d; --line2:#262b33;
+  --soft:#20252c; --nav-on:#243247; --nav-on-ink:#9cc0f0; --accent:#e7eaef; --accent-ink:#15181d;
+  --past:#262b33; --frz:#1f2a3a; --frz-line:#4e6d9c; --ovr:#3d3410; --warn-bg:#332b10; --warn-line:#6b5a1f; --warn-ink:#f0d58a;
+  --good:#4ade80; --bad:#f87171; --amber:#fbbf24; --link:#9cc0f0;
+  --p-model-bg:#1e3350; --p-model:#9cc0f0; --p-man-bg:#1b3324; --p-man:#86d89c; --p-tur-bg:#2f2240; --p-tur:#c9a8ea; --p-yuk-bg:#2a2f37; --p-yuk:#c2c8d1; --p-sen-bg:#3b2a17; --p-sen:#f3b57a;
+}}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#15181d; --panel:#1d2128; --ink:#e7eaef; --mute:#9aa3ae; --line:#2e343d; --line2:#262b33;
+  --soft:#20252c; --nav-on:#243247; --nav-on-ink:#9cc0f0; --accent:#e7eaef; --accent-ink:#15181d;
+  --past:#262b33; --frz:#1f2a3a; --frz-line:#4e6d9c; --ovr:#3d3410; --warn-bg:#332b10; --warn-line:#6b5a1f; --warn-ink:#f0d58a;
+  --good:#4ade80; --bad:#f87171; --amber:#fbbf24; --link:#9cc0f0;
+  --p-model-bg:#1e3350; --p-model:#9cc0f0; --p-man-bg:#1b3324; --p-man:#86d89c; --p-tur-bg:#2f2240; --p-tur:#c9a8ea; --p-yuk-bg:#2a2f37; --p-yuk:#c2c8d1; --p-sen-bg:#3b2a17; --p-sen:#f3b57a;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:13px;line-height:1.45;color:var(--ink);background:var(--bg)}
+a{color:var(--link);text-decoration:none}
+button,input,select,textarea{font-family:inherit;font-size:13px;color:var(--ink)}
+h1{margin:0;font-size:22px;font-weight:600;line-height:1.3}
+h2{margin:0;font-size:15px;font-weight:600}
+.app{display:flex;flex-wrap:wrap;min-height:100%}
+.nav{width:220px;padding:20px 12px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:2px}
+.nav .brand{font-size:15px;font-weight:600;padding:6px 14px 16px}
+.nav a{display:block;padding:10px 14px;border-radius:6px;font-size:14px;color:var(--ink)}
+.nav a.on{background:var(--nav-on);color:var(--nav-on-ink);font-weight:600}
+.nav .spacer{flex-grow:1}
+.nav .who{font-size:12px;color:var(--mute);padding:10px 14px;border-top:1px solid var(--line);margin-top:8px}
+main{flex:999 1 560px;min-width:0;padding:24px 28px;display:flex;flex-direction:column;gap:18px}
+.sub{font-size:13px;color:var(--mute);margin-top:4px}
+.crumb{font-size:12px;color:var(--mute)}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.grow{flex-grow:1}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.panel.pad{padding:14px 16px}
+.panel .head{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.lbl{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--mute);font-weight:600}
+.btn{font-weight:600;line-height:20px;padding:9px 14px;border-radius:6px;border:1px solid var(--line);background:var(--panel);cursor:pointer;min-height:40px;color:var(--ink)}
+.btn:hover{border-color:var(--mute)}
+.btn.pri{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.sm{padding:6px 10px;min-height:34px;font-size:12px}
+.btn.danger{color:var(--bad)}
+.btn:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--link);outline-offset:2px}
+.sel{padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);min-height:38px;color:var(--ink);width:100%}
+.fld{display:flex;flex-direction:column;gap:6px}
+.hint{font-size:12px;color:var(--mute)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;flex-wrap:wrap;background:var(--panel)}
+.seg button{font-size:12px;font-weight:600;padding:8px 12px;border:0;background:transparent;cursor:pointer;min-height:36px;border-right:1px solid var(--line);color:var(--ink)}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--accent);color:var(--accent-ink)}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--mute);font-weight:600;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--soft);white-space:nowrap}
+.tbl td{padding:10px 12px;border-bottom:1px solid var(--line2);vertical-align:middle;white-space:nowrap}
+.tbl tr:last-child td{border-bottom:0}
+.tbl tr.arc td{color:var(--mute)}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.scroll{overflow-x:auto}
+.pill{display:inline-block;font-size:11px;font-weight:600;line-height:18px;padding:1px 8px;border-radius:9px;white-space:nowrap}
+.p-model{background:var(--p-model-bg);color:var(--p-model)} .p-man{background:var(--p-man-bg);color:var(--p-man)} .p-tur{background:var(--p-tur-bg);color:var(--p-tur)} .p-yuk{background:var(--p-yuk-bg);color:var(--p-yuk)} .p-sen{background:var(--p-sen-bg);color:var(--p-sen)}
+.good{color:var(--good);font-weight:600}.bad{color:var(--bad);font-weight:600}.amber{color:var(--amber);font-weight:600}.mute{color:var(--mute)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:5px;margin-right:8px;vertical-align:-1px}
+.st-live{color:var(--good);font-weight:600}.st-frz{color:var(--mute);font-weight:600}
+input[type=checkbox],input[type=radio]{width:18px;height:18px;accent-color:var(--accent)}
+.chk{display:flex;align-items:center;gap:8px;font-size:13px}
+.tabs{display:flex;gap:24px;border-bottom:1px solid var(--line)}
+.tabs a{font-size:14px;font-weight:600;padding:10px 4px;border-bottom:2px solid transparent;color:var(--mute)}
+.tabs a.on{color:var(--ink);border-bottom-color:var(--ink)}
+.cards{display:flex;flex-wrap:wrap;gap:12px}
+.card{border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:var(--panel);min-width:150px;flex:1 1 150px}
+.card .v{font-size:22px;font-weight:600;margin-top:4px;font-variant-numeric:tabular-nums}
+.kv{display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:6px 0;border-bottom:1px solid var(--line2)}
+.kv:last-child{border-bottom:0}
+.warnbox{background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:8px;padding:10px 14px;color:var(--warn-ink)}
+.infobox{background:var(--nav-on);border:1px solid var(--line);border-radius:8px;padding:10px 14px;color:var(--ink)}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--mute);align-items:center}
+.legend .sw{display:inline-block;width:18px;height:3px;vertical-align:middle;margin-right:6px;border-radius:2px}
+/* grid */
+.g{border-collapse:collapse;font-size:12px;width:100%}
+.g th{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--mute);font-weight:600;padding:8px;border-bottom:1px solid var(--line);background:var(--soft);text-align:right;white-space:nowrap}
+.g th:first-child{text-align:left}
+.g td{padding:0;border-bottom:1px solid var(--line2);border-right:1px solid var(--line2);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.g td:first-child{text-align:left;padding:7px 10px;font-weight:600;background:var(--soft)}
+.g .c{display:block;padding:7px 8px;min-height:18px}
+.g .past{background:var(--past);color:var(--mute)}
+.g .frz{background:var(--frz);color:var(--mute);border-top:2px solid var(--frz-line)}
+.g .tot{font-weight:600;background:var(--soft)}
+.g input{font-size:12px;width:100%;min-width:72px;padding:7px 8px;border:0;background:transparent;text-align:right;color:var(--ink);font-variant-numeric:tabular-nums}
+.g input::placeholder{color:var(--mute);font-style:italic;opacity:.8}
+.g td.ovr{background:var(--ovr)}
+.g td.selc{outline:2px solid var(--link);outline-offset:-2px}
+/* steps */
+.stp{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--mute)}
+.stp .n{width:24px;height:24px;border-radius:12px;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;background:var(--panel)}
+.stp.on{color:var(--ink);font-weight:600}.stp.on .n{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.stp.done .n{background:var(--p-man-bg);color:var(--p-man);border-color:var(--p-man-bg)}
+.opt{display:flex;gap:14px;align-items:flex-start;padding:16px;border:1px solid var(--line);border-radius:10px;background:var(--panel);cursor:pointer}
+.opt.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.opt input{margin-top:2px;flex-shrink:0}
+.step{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.rn{width:26px;height:26px;border-radius:13px;background:var(--accent);color:var(--accent-ink);font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.rule{display:flex;gap:12px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.drv{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:6px;font-size:13px;cursor:pointer;color:var(--ink);width:100%;border:0;background:transparent;text-align:left}
+.drv.on{background:var(--nav-on);font-weight:600}
+.badge{font-size:11px;font-weight:600;padding:1px 7px;border-radius:9px;background:var(--p-sen-bg);color:var(--p-sen)}
+.bar{height:10px;border-radius:5px;background:var(--p-yuk-bg);overflow:hidden;display:flex}
+/* modal */
+.backdrop{position:fixed;inset:0;background:rgba(10,12,16,.45);display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px calc(16px + env(safe-area-inset-bottom,0px));overflow:auto;z-index:50}
+.modal{background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);width:100%;max-width:640px;display:flex;flex-direction:column}
+.modal.wide{max-width:980px}
+.modal .mh{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.modal .mb{padding:16px 18px;display:flex;flex-direction:column;gap:14px}
+.modal .mf{display:flex;justify-content:flex-end;gap:10px;padding:12px 18px;border-top:1px solid var(--line)}
+.x{border:0;background:transparent;font-size:20px;line-height:1;cursor:pointer;color:var(--mute);padding:6px 10px;min-height:40px}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--accent);color:var(--accent-ink);padding:10px 16px;border-radius:8px;font-weight:600;box-shadow:var(--shadow);z-index:60;opacity:0;transition:opacity .2s}
+.toast.show{opacity:1}
+.prog{height:8px;background:var(--p-yuk-bg);border-radius:4px;overflow:hidden}
+.prog div{height:100%;background:var(--accent);width:0;transition:width .4s}
+.empty{padding:40px;text-align:center;color:var(--mute)}
+@media (max-width:760px){ main{padding:16px} .nav{width:100%;border-right:0;border-bottom:1px solid var(--line);flex-direction:row;flex-wrap:wrap;padding:10px} .nav .brand{width:100%;padding-bottom:8px} .nav .spacer,.nav .who{display:none} }
+@media (prefers-reduced-motion: reduce){ .toast,.prog div{transition:none} }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="nav" id="nav" aria-label="Ana menü"></nav>
+  <main id="view"></main>
+</div>
+<div id="modal-root"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* ---------- data ---------- */
+const PAST = ['Eki 25','Kas 25','Ara 25','Oca 26','Şub 26','Mar 26','Nis 26','May 26','Haz 26','Tem 26','Ağu 26','Eyl 26'];
+const FRZ = ['Kas 26','Ara 26'];
+const FUT = ['Oca 27','Şub 27','Mar 27','Nis 27','May 27','Haz 27','Tem 27','Ağu 27','Eyl 27','Eki 27','Kas 27','Ara 27','Oca 28','Şub 28','Mar 28'];
+const ALL = PAST.concat(['Eki 26'], FRZ, FUT); // 30 points
+const TODAY = 12; // index of Eki 26
+function seasonal(n, base, amp, drift){ const out=[]; for(let i=0;i<n;i++){ out.push(Math.round(base + drift*i + amp*Math.sin((i+2)/12*2*Math.PI) + (i%7===3?1400:0))); } return out; }
+const ML = seasonal(30, 35000, 3600, 110);                    // model, full range
+const ACT = ML.slice(0,13).map((v,i)=>Math.round(v*(1+((i*37)%11-5)/120)));   // actual up to Eki 26
+const LY  = ML.map(v=>Math.round(v*0.9));
+const BUD = ML.map(v=>Math.round(v*1.06));
+function fut(arr){ return arr.slice(15); } // 15 future points (Oca 27..)
+const TUFE_BASE = [33,32.5,32,31.5,31,31,30.5,30,29.5,29,29,28.5,28.5,28,28];
+const TUFE_PAST = [61,58,55,52,50,47,45,43,41,39,38,37,36,35.5,34.5]; // Eki 25 .. Ara 26
+const REGIONS = ['İstanbul Avrupa','İstanbul Anadolu','Bursa','Kocaeli','Tekirdağ'];
+const SHARE = [0.37,0.28,0.19,0.11,0.05];
+const REASONS = ['Kampanya','İhale','Stok yok','Lansman','Rakip hareketi','Dış etken','Kapasite'];
+const TREE = {
+  geo:{name:'Bölge',nodes:[{id:'tr',name:'Türkiye',children:[
+    {id:'mar',name:'Marmara',children:[{id:'ist-a',name:'İstanbul Avrupa',share:.16},{id:'ist-b',name:'İstanbul Anadolu',share:.12},{id:'bursa',name:'Bursa',share:.08},{id:'kocaeli',name:'Kocaeli',share:.05},{id:'tekirdag',name:'Tekirdağ',share:.02}]},
+    {id:'ege',name:'Ege',children:[{id:'izmir',name:'İzmir',share:.11},{id:'manisa',name:'Manisa',share:.04},{id:'aydin',name:'Aydın',share:.03}]},
+    {id:'ic',name:'İç Anadolu',children:[{id:'ankara',name:'Ankara',share:.14},{id:'konya',name:'Konya',share:.05}]},
+    {id:'akd',name:'Akdeniz',children:[{id:'antalya',name:'Antalya',share:.07},{id:'adana',name:'Adana',share:.05}]},
+    {id:'kar',name:'Karadeniz',children:[{id:'samsun',name:'Samsun',share:.04}]},
+    {id:'dgd',name:'Doğu ve Güneydoğu',children:[{id:'gaziantep',name:'Gaziantep',share:.03},{id:'diyarbakir',name:'Diyarbakır',share:.01}]}]}]},
+  product:{name:'Ürün',nodes:[{id:'all-p',name:'Tüm ürünler',children:[
+    {id:'onk',name:'Onkoloji',children:[{id:'sku1042',name:'SKU 1042',share:.2},{id:'sku1188',name:'SKU 1188',share:.1}]},
+    {id:'kard',name:'Kardiyoloji',children:[{id:'sku2210',name:'SKU 2210',share:.3},{id:'sku0421',name:'SKU 0421',share:.15}]},
+    {id:'yeni',name:'Yeni ürünler',children:[{id:'sku3005',name:'SKU 3005',share:.05}]},
+    {id:'dig',name:'Diğer',children:[{id:'sku9',name:'Diğer SKU lar',share:.2}]}]}]}
+};
+const GROUPS = [{name:'Büyük şehirler',dim:'geo',sel:['ist-a','ist-b','izmir','ankara']},{name:'Onkoloji + Kardiyoloji',dim:'product',sel:['onk','kard']}];
+const SNAPS = [{k:'current',label:'Güncel'},{k:1,label:'Eylül 2026 kapanışı'},{k:2,label:'Ağustos 2026 kapanışı'},{k:3,label:'Temmuz 2026 kapanışı'}];
+
+const state = {
+  cycle:{period:'Ekim 2026', freeze:'Kasım ve Aralık', snapshot:'01.10.2026', horizon:'Mart 2028'},
+  user:{name:'M. Kaya', role:'Planlamacı'},
+  forecasts:[
+    {id:'ml', name:'ML talep tahmini', type:'Model', owner:'Sistem', level:'SKU', updated:'15.10.2026 06:00, otomatik', fill:100, mape:4.5, status:'Canlı', cockpit:true, color:'#2563eb', values:ML},
+    {id:'sales', name:'Satış tahmini', type:'Manuel', owner:'Satış ekibi', level:'Bölge', updated:'14.10.2026, A. Yılmaz', fill:82, mape:6.1, status:'Canlı', cockpit:true, color:'#16a34a', values:ML.map((v,i)=>i<13?null:Math.round(v*1.03)), reasonThreshold:10},
+    {id:'plan', name:'Planlama tahmini', type:'Manuel', owner:'Planlama', level:'Ürün grubu', updated:'12.10.2026, M. Kaya', fill:100, mape:5.2, status:'Canlı', cockpit:false, color:'#0e9f8f', values:ML.map((v,i)=>i<13?null:Math.round(v*0.99)), reasonThreshold:10},
+    {id:'cons2', name:'Konsensüs v2', type:'Türetilmiş', owner:'Planlama', level:'SKU', updated:'Kural: planlama, yoksa satış, yoksa model', fill:100, mape:3.3, status:'Canlı', cockpit:true, color:'#111827', values:ML.map((v,i)=>i<13?null:Math.round(v*0.995)), rule:{kind:'Öncelik zinciri', chain:['Planlama tahmini','Satış tahmini','ML talep tahmini'], exceptions:['ABC sınıfı = C: doğrudan ML talep tahmini']}},
+    {id:'cons1', name:'Konsensüs v1', type:'Türetilmiş', owner:'Planlama', level:'SKU', updated:'Kural: ağırlıklı 0,5 / 0,3 / 0,2, Ağustos 2026 da kapatıldı', fill:100, mape:3.9, status:'Arşiv', cockpit:false, color:'#9ca3af', values:ML.map((v,i)=>i<13?null:Math.round(v*1.01)), rule:{kind:'Ağırlıklı ortalama', chain:['ML 0,5','Satış 0,3','Planlama 0,2'], exceptions:[]}},
+    {id:'bud', name:'Bütçe 2027', type:'Yüklenen', owner:'Finans', level:'Ürün grubu', updated:'01.10.2026, dosya', fill:100, mape:8.0, status:'Dondurulmuş', cockpit:true, color:'#6b7280', values:BUD.map((v,i)=>i<13?null:v)},
+  ],
+  scenarios:[
+    {id:'s1', name:'Enflasyon %60 + savaş', base:'ml', scope:'Tüm kapsam', start:0, desc:'TÜFE OVP yerine %60; Mart tan itibaren bölgesel gerilim etkisi', tufe:TUFE_BASE.map(()=>60), method:'Sabit', rules:[{type:'Çarpan',scope:'Tüm kapsam',start:2,end:14,param:-10,reason:'Dış etken',note:'Bölgesel gerilim, ihracat kanalı daralır'}], lastRun:'16.10.2026 09:40', driversDirty:false, moved:false},
+    {id:'s2', name:'Kur şoku + ihale', base:'ml', scope:'Tüm kapsam', start:0, desc:'', tufe:TUFE_BASE.map(v=>v+6), method:'Sabit', rules:[{type:'Ek değer',scope:'Tüm kapsam',start:3,end:3,param:12000,reason:'İhale',note:''}], lastRun:'15.10.2026 17:05', driversDirty:false, moved:false},
+    {id:'s3', name:'Satış tahmini, kapasite tavanı', base:'sales', scope:'Tüm kapsam', start:0, desc:'', tufe:TUFE_BASE.slice(), method:'Sabit', rules:[{type:'Tavan',scope:'Tüm kapsam',start:0,end:14,param:42000,reason:'Kapasite',note:''}], lastRun:'15.10.2026 11:20', driversDirty:false, moved:false},
+    {id:'s4', name:'Yolcu düşüşü %15', base:'ml', scope:'Tüm kapsam', start:0, desc:'', tufe:TUFE_BASE.slice(), method:'Sabit', rules:[], lastRun:null, driversDirty:true, moved:false},
+  ],
+  entry:{},        // manual forecast grids
+  cockpitSel:['ml','cons2'],
+  cockpitMeasure:'Adet', cockpitGrain:'Ay', cockpitAgg:'Toplam',
+  compareSel:['ml','cons2','s1'],
+  consDraft:null,
+  wizard:null,
+  selCell:null,
+  scenarioTab:'suruculer',
+  driverSel:'tufe',
+  unsaved:0,
+  scope:{dim:'geo',sel:['tr'],label:'Tüm kapsam',factor:1},
+  scopeDraft:null,
+  snap:'current',
+  alerts:[
+    {id:'a1',type:'Düşük doğruluk',sev:'Yüksek',series:'SKU 3005, İç Anadolu',forecast:'Satış tahmini',period:'Eyl 26',size:'MAPE %31, lag 1',status:'open',link:'#/giris/sales'},
+    {id:'a2',type:'Büyük değişim',sev:'Orta',series:'Konsensüs v2, Marmara',forecast:'Konsensüs v2',period:'Mar 27',size:'Eylül kapanışına göre +%18',status:'open',link:'#/karsilastir'},
+    {id:'a3',type:'Eksik veri',sev:'Orta',series:'Samsun, tüm SKU lar',forecast:'Gerçekleşen',period:'Eki 26',size:'Ekim gerçekleşeni gelmedi',status:'open',link:'#/yonetim'},
+    {id:'a4',type:'Düşük doğruluk',sev:'Düşük',series:'SKU 1188, Ege',forecast:'Konsensüs v2',period:'Eyl 26',size:'MAPE %24, lag 1',status:'closed',link:'#/dogruluk'},
+  ],
+};
+/* hierarchy helpers */
+function findNode(id,nodes){ for(const n of nodes||[]){ if(n.id===id) return n; const f=findNode(id,n.children); if(f) return f; } return null; }
+function leafShare(n){ return n.children? n.children.reduce((a,c)=>a+leafShare(c),0) : (n.share||0); }
+function allIds(n,acc=[]){ acc.push(n.id); (n.children||[]).forEach(c=>allIds(c,acc)); return acc; }
+function scopeInfo(dim,sel){ const roots=TREE[dim].nodes; const nodes=sel.map(id=>findNode(id,roots)).filter(Boolean);
+  // drop nodes whose ancestor is also selected
+  const top=nodes.filter(n=>!nodes.some(o=>o!==n&&allIds(o).includes(n.id)));
+  const factor=Math.min(1,top.reduce((a,n)=>a+leafShare(n),0)); const isAll=top.some(n=>roots.includes(n));
+  const leaves=top.reduce((a,n)=>a+(n.children?allIds(n).length-1:1),0);
+  return {label:isAll?'Tüm kapsam':(top.map(n=>n.name).slice(0,3).join(', ')+(top.length>3?' +'+(top.length-3):'')), factor:isAll?1:factor, count:leaves, top};
+}
+function snapView(values,k){ if(k==='current') return values; const cut=TODAY-k; return values.map((v,i)=> v==null?null: i<cut? v : Math.round(v*(1+0.012*k*Math.sin(i/2+k)))); }
+function snapActual(k){ return k==='current'? ACT : ACT.slice(0,TODAY-k+1); }
+function initEntry(fid){
+  if(state.entry[fid]) return state.entry[fid];
+  const f = fc(fid);
+  const rows = REGIONS.map((name,r)=>({name, ml:fut(ML).map(v=>Math.round(v*SHARE[r])), val:fut(ML).map((v,i)=> (fid==='sales' && r<4) ? Math.round(v*SHARE[r]*1.03) : null), reason:{}}));
+  if(fid==='sales'){ rows[0].val[2]=Math.round(rows[0].val[2]*1.05); rows[0].reason[2]={code:'Kampanya',note:'Mart bayram kampanyası, 2 hafta ek vitrin',by:'A. Yılmaz',at:'14.10.2026 16:40',prev:rows[0].ml[2]}; }
+  state.entry[fid]={rows, saved:true};
+  return state.entry[fid];
+}
+const fc = id => state.forecasts.find(f=>f.id===id);
+const sc = id => state.scenarios.find(s=>s.id===id);
+
+/* ---------- helpers ---------- */
+const fmt = n => n==null? '' : Math.round(n).toLocaleString('tr-TR');
+const fmtK = n => n==null? '' : Math.abs(n)>=1e6 ? (n/1e6).toLocaleString('tr-TR',{maximumFractionDigits:2})+' mn' : Math.abs(n)>=1000 ? (n/1000).toLocaleString('tr-TR',{maximumFractionDigits:1})+' b' : fmt(n);
+const pct = (a,b) => b? ((a-b)/b*100) : 0;
+const fmtP = p => (p>0?'+':'')+'%'+p.toLocaleString('tr-TR',{maximumFractionDigits:1});
+const parseNum = s => { s=String(s).trim(); if(!s) return null; const n=Number(s.replace(/\./g,'').replace(',','.')); return isNaN(n)?null:n; };
+const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const typePill = t => ({Model:'p-model',Manuel:'p-man','Türetilmiş':'p-tur','Yüklenen':'p-yuk',Senaryodan:'p-sen'})[t]||'p-yuk';
+const now = () => { const d=new Date(); return d.toLocaleDateString('tr-TR')+' '+d.toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'}); };
+let toastT; function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2600); }
+function sum(a){ return a.reduce((x,y)=>x+(y||0),0); }
+
+/* scenario math */
+function scenarioSeries(s){
+  const base = fc(s.base);
+  const baseFut = fut(base.values).map((v,i)=> v==null ? fut(ML)[i] : v);
+  const ran = !!s.lastRun && !s.driversDirty;
+  let drv = baseFut.map((v,i)=> (base.type==='Model' && ran) ? v*(1 - 0.0017*(s.tufe[i]-TUFE_BASE[i])) : v);
+  const driverEffect = sum(drv)-sum(baseFut);
+  let cur = drv.slice(); const ruleEffects=[];
+  s.rules.forEach(r=>{
+    const before = sum(cur);
+    cur = cur.map((v,i)=>{ if(i<r.start||i>r.end) return v; if(r.type==='Çarpan') return v*(1+r.param/100); if(r.type==='Ek değer') return v+r.param; if(r.type==='Tavan') return Math.min(v,r.param); if(r.type==='Taban') return Math.max(v,r.param); return v; });
+    ruleEffects.push(sum(cur)-before);
+  });
+  return {baseFut, drv, out:cur.map(Math.round), driverEffect, ruleEffects, ran, baseTotal:sum(baseFut)};
+}
+function seriesOf(id){ // full 30-point series for charts, nulls for missing
+  if(fc(id)) return {name:fc(id).name,color:fc(id).color,values:fc(id).values};
+  const s=sc(id); const r=scenarioSeries(s); return {name:s.name,color:'#d97706',dash:true,values:ML.map((v,i)=> i<15? null : r.out[i-15])};
+}
+
+/* chart */
+function lineChart(series, opts={}){
+  const w=900,h=opts.h||260,pl=46,pr=12,pt=14,pb=28;
+  const labels = opts.labels||ALL; const n=labels.length;
+  let lo=Infinity,hi=-Infinity; series.forEach(s=>s.values.forEach(v=>{ if(v!=null){lo=Math.min(lo,v);hi=Math.max(hi,v);} }));
+  if(!isFinite(lo)){lo=0;hi=1;} const pad=(hi-lo)*0.12||1; lo-=pad; hi+=pad;
+  const x=i=>pl+(w-pl-pr)*i/(n-1), y=v=>pt+(h-pt-pb)*(1-(v-lo)/(hi-lo));
+  let g='';
+  for(let k=0;k<4;k++){ const v=lo+(hi-lo)*k/3; g+=`<line x1="${pl}" y1="${y(v)}" x2="${w-pr}" y2="${y(v)}" stroke="var(--line2)"/><text x="${pl-6}" y="${y(v)+4}" font-size="10" fill="var(--mute)" text-anchor="end">${opts.fmt?opts.fmt(v):fmtK(v)}</text>`; }
+  if(opts.today!=null){ g+=`<rect x="${x(opts.today)}" y="${pt}" width="${x(opts.today+2)-x(opts.today)}" height="${h-pt-pb}" fill="var(--frz)"/><line x1="${x(opts.today)}" y1="${pt}" x2="${x(opts.today)}" y2="${h-pb}" stroke="var(--ink)" stroke-dasharray="3 3"/><text x="${x(opts.today)+4}" y="${pt+10}" font-size="10" fill="var(--ink)">bugün</text><text x="${x(opts.today+1)}" y="${h-pb-4}" font-size="9" fill="var(--mute)" text-anchor="middle">freeze</text>`; }
+  series.forEach(s=>{ let pts=[],segs=[]; s.values.forEach((v,i)=>{ if(v==null){ if(pts.length) segs.push(pts); pts=[]; } else pts.push(`${x(i).toFixed(1)},${y(v).toFixed(1)}`); }); if(pts.length) segs.push(pts);
+    segs.forEach(p=>{ g+=`<polyline fill="none" stroke="${s.color}" stroke-width="${s.width||2}" ${s.dash?'stroke-dasharray="6 4"':''} points="${p.join(' ')}"/>`; }); });
+  for(let i=0;i<n;i+=Math.ceil(n/10)){ g+=`<text x="${x(i)}" y="${h-8}" font-size="10" fill="var(--mute)" text-anchor="middle">${labels[i]}</text>`; }
+  const leg = series.map(s=>`<span><span class="sw" style="background:${s.color};${s.dash?'opacity:.7':''}"></span>${esc(s.name)}</span>`).join('');
+  return `<div class="legend" style="margin-bottom:6px">${leg}</div><svg viewBox="0 0 ${w} ${h}" width="100%" role="img" aria-label="${esc(opts.label||'Grafik')}" style="display:block">${g}</svg>`;
+}
+
+/* ---------- router ---------- */
+const routes = ['kokpit','tahminler','giris','konsensus','senaryo','karsilastir','dogruluk','raporlar','yonetim'];
+function route(){ const h=location.hash.replace(/^#\/?/,'')||'kokpit'; const [path,q]=h.split('?'); const parts=path.split('/'); const query={}; (q||'').split('&').forEach(p=>{ if(p){const [k,v]=p.split('='); query[k]=decodeURIComponent(v||'');} }); return {page:parts[0],id:parts[1],query}; }
+function go(h){ location.hash=h; }
+function renderNav(){
+  const r=route(); const items=[['kokpit','Kokpit'],['tahminler','Tahminler'],['karsilastir','Karşılaştır'],['dogruluk','Doğruluk'],['raporlar','Raporlar']];
+  const on = p => (r.page===p || (p==='tahminler' && ['giris','konsensus','senaryo'].includes(r.page))) ? 'on':'';
+  document.getElementById('nav').innerHTML = `<div class="brand">Forecast Platformu</div>` + items.map(([p,l])=>`<a href="#/${p}" class="${on(p)}">${l}</a>`).join('') + `<div class="spacer"></div><a href="#/yonetim" class="${on('yonetim')}">Yönetim</a><div class="who">${state.user.name}, ${state.user.role}<br>Aktif dönem ${state.cycle.period}</div>`;
+}
+function render(){
+  renderNav(); const r=route(); const v=document.getElementById('view'); state.selCell=null;
+  const pages={kokpit:pKokpit,tahminler:pTahminler,giris:pGiris,konsensus:pKonsensus,senaryo:pSenaryo,karsilastir:pKarsilastir,dogruluk:pDogruluk,raporlar:pRaporlar,yonetim:pYonetim};
+  v.innerHTML = (pages[r.page]||pKokpit)(r); window.scrollTo(0,0);
+}
+window.addEventListener('hashchange',render);
+
+/* ---------- pages ---------- */
+function pKokpit(){
+  const opts = state.forecasts.filter(f=>f.status!=='Arşiv');
+  const k=state.snap; const fac=state.scope.factor; const todayIdx = k==='current'?TODAY:TODAY-k;
+  const scaled = v => v==null?null:Math.round(v*fac);
+  const sel = state.cockpitSel.map(id=>{ const s=seriesOf(id); return Object.assign({},s,{values:snapView(s.values,k).map(scaled)}); });
+  const act = snapActual(k).map(scaled);
+  const series = [{name:'Gerçekleşen',color:'#0e9f8f',values:act.concat(Array(30-act.length).fill(null)),width:2.5}].concat(sel, [{name:'Bütçe',color:'#6b7280',dash:true,values:BUD.map((v,i)=>i<13?null:scaled(v))},{name:'Geçen yıl',color:'#db2777',dash:true,values:LY.map(scaled)}]);
+  const rowsT = sel.map(s=>`<tr><td><span class="dot" style="background:${s.color}"></span>${esc(s.name)}</td><td class="num">${fmtK(sum(s.values.slice(0,todayIdx+1)))}</td><td class="num">${fmtK(sum(s.values.slice(todayIdx+3)))}</td><td class="num">${fmtK(sum(s.values.slice(0,todayIdx+1))*103)} ₺</td><td class="num">${fmtK(sum(s.values.slice(todayIdx+3))*146)} ₺</td></tr>`).join('');
+  const acc = state.cockpitSel.map(id=>{ const f=fc(id); const mape=f?f.mape:4.8; const gap=f?pct(sum(f.values.slice(15)),sum(BUD.slice(15))):-11.8; return `<tr><td><span class="dot" style="background:${seriesOf(id).color}"></span>${esc(seriesOf(id).name)}</td><td class="num">%${mape.toLocaleString('tr-TR')}</td><td class="num">%${(mape*1.36).toLocaleString('tr-TR',{maximumFractionDigits:1})}</td><td class="num ${gap<0?'bad':'good'}">${fmtP(gap)}</td></tr>`; }).join('');
+  const openA = state.alerts.filter(a=>a.status==='open');
+  const alerts = state.alerts.map(a=>`<tr class="${a.status==='closed'?'arc':''}"><td><span class="pill ${a.sev==='Yüksek'?'p-sen':a.sev==='Orta'?'p-yuk':'p-man'}">${a.sev}</span></td><td style="font-weight:600">${a.type}</td><td>${esc(a.series)}</td><td>${esc(a.forecast)}</td><td>${a.period}</td><td>${esc(a.size)}</td><td>${a.status==='open'?'Açık':'Kapatıldı'}</td><td style="text-align:right;white-space:nowrap"><a class="btn sm" href="${a.link}" style="display:inline-block">Git</a> ${a.status==='open'?`<button class="btn sm" data-act="alert-close" data-id="${a.id}">Kapat</button>`:''}</td></tr>`).join('');
+  const snapLabel = SNAPS.find(x=>String(x.k)===String(k)).label;
+  return `
+  <div class="row"><div class="grow"><h1>Kokpit</h1><div class="sub">Aktif dönem ${state.cycle.period}, freeze ${state.cycle.freeze}, son snapshot ${state.cycle.snapshot}, ufuk ${state.cycle.horizon}</div></div><button class="btn" data-act="toggle-theme">Tema</button></div>
+  ${k!=='current'?`<div class="warnbox"><strong>${snapLabel} görünümü.</strong> O gün görülen değerler; sonradan gelen gerçekleşen ve sonraki düzeltmeler gösterilmez. Salt okunur. <a href="#" data-act="snap-current">Güncele dön</a></div>`:''}
+  <div class="cards">
+    <div class="card"><div class="lbl">Bekleyen giriş</div><div class="v">2</div><div class="hint">Satış tahmini: Tekirdağ boş, Planlama: Ağustos sonrası boş</div></div>
+    <div class="card"><div class="lbl">Son çalıştırma</div><div class="v">06:00</div><div class="hint">ML talep tahmini, 1.240 seri, 41 sn</div></div>
+    <div class="card"><div class="lbl">Açık uyarı</div><div class="v">${openA.length}</div><div class="hint"><a href="#uyarilar">${openA.filter(a=>a.type==='Düşük doğruluk').length} düşük doğruluk, ${openA.filter(a=>a.type==='Eksik veri').length} eksik veri, ${openA.filter(a=>a.type==='Büyük değişim').length} büyük değişim</a></div></div>
+    <div class="card"><div class="lbl">Sonraki snapshot</div><div class="v">01.11</div><div class="hint">Freeze Aralık ve Ocak a kayar</div></div>
+  </div>
+  <div class="panel pad row" style="gap:20px;align-items:flex-start">
+    <div class="fld"><span class="lbl">Dönem</span><div class="row"><div class="seg"><button class="on">Tarih aralığı</button><button>Dönem sayısı</button></div><select class="sel" style="width:auto"><option>2025-10</option></select><select class="sel" style="width:auto"><option>2028-03</option></select></div></div>
+    <div class="fld"><span class="lbl">Kapanış</span><select class="sel" style="width:auto" data-act="snap" aria-label="Kapanış">${SNAPS.map(x=>`<option value="${x.k}" ${String(x.k)===String(k)?'selected':''}>${x.label}</option>`).join('')}</select><div class="hint">Geçmiş kapanış seçince o gün görülen hali gelir</div></div>
+    <div class="fld"><span class="lbl">Kapsam</span><button class="btn" data-act="scope-open" data-target="cockpit" style="text-align:left">${esc(state.scope.label)} <span class="mute" style="font-weight:400">(${TREE[state.scope.dim].name}${state.scope.factor<1?', payı %'+Math.round(state.scope.factor*100):''})</span> ▾</button></div>
+    <div class="fld"><span class="lbl">Tahmin</span><div style="display:flex;flex-direction:column;gap:4px">${opts.map(f=>`<label class="chk"><input type="checkbox" data-act="cockpit-sel" data-id="${f.id}" ${state.cockpitSel.includes(f.id)?'checked':''}><span class="dot" style="background:${f.color}"></span>${esc(f.name)} <span class="pill ${typePill(f.type)}">${f.type}</span></label>`).join('')}</div></div>
+    <div class="fld"><span class="lbl">Gösterim</span><div class="row"><div class="seg">${['Adet','Ciro'].map(v=>`<button data-act="seg" data-key="cockpitMeasure" data-v="${v}" class="${state.cockpitMeasure===v?'on':''}">${v}</button>`).join('')}</div><div class="seg">${['Ay','Çeyrek','Yıl'].map(v=>`<button data-act="seg" data-key="cockpitGrain" data-v="${v}" class="${state.cockpitGrain===v?'on':''}">${v}</button>`).join('')}</div><div class="seg">${['Toplam','Ortalama'].map(v=>`<button data-act="seg" data-key="cockpitAgg" data-v="${v}" class="${state.cockpitAgg===v?'on':''}">${v}</button>`).join('')}</div></div></div>
+  </div>
+  <div class="panel pad"><h2>Tahmin karşılaştırma</h2><div class="hint" style="margin-bottom:10px">${state.cockpitMeasure}, ${esc(state.scope.label)}, 2025-10 ile 2028-03, ${state.cockpitGrain.toLowerCase()} bazında, ${state.cockpitAgg.toLowerCase()}${k!=='current'?', '+snapLabel:''}</div>
+    ${lineChart(series,{today:todayIdx,label:'Tahmin karşılaştırma'})}
+    <div class="scroll" style="margin-top:12px"><table class="tbl"><thead><tr><th></th><th class="num">Adet geçmiş</th><th class="num">Adet gelecek</th><th class="num">Ciro geçmiş</th><th class="num">Ciro gelecek</th></tr></thead><tbody>
+    <tr><td><span class="dot" style="background:#0e9f8f"></span>Gerçekleşen</td><td class="num">${fmtK(sum(act))}</td><td class="num mute">yok</td><td class="num">${fmtK(sum(act)*103)} ₺</td><td class="num mute">yok</td></tr>${rowsT}</tbody></table></div>
+  </div>
+  <div class="panel pad"><h2>Doğruluk ve bütçe farkı</h2><div class="hint" style="margin-bottom:8px">Lag 1 ve lag 3 MAPE, bütçe farkı 12 dönem üzerinden</div>
+    <table class="tbl"><thead><tr><th>Tahmin</th><th class="num">MAPE lag 1</th><th class="num">MAPE lag 3</th><th class="num">Bütçe farkı</th></tr></thead><tbody>${acc||'<tr><td colspan="4" class="mute">Üstten en az bir tahmin seç</td></tr>'}</tbody></table></div>
+  <section class="panel" id="uyarilar"><div class="head"><div class="grow"><h2>Uyarılar</h2><div class="hint">Eşikler yönetimden; önem sırasına göre. Git ile ilgili ekrana gidilir, Kapat ile uyarı kapanır.</div></div><label class="chk"><input type="checkbox" data-act="toast" data-m="Kapananlar gizlendi">Kapananları gizle</label></div>
+    <div class="scroll"><table class="tbl"><thead><tr><th>Önem</th><th>Tip</th><th>Seri</th><th>Tahmin</th><th>Dönem</th><th>Büyüklük</th><th>Durum</th><th></th></tr></thead><tbody>${alerts}</tbody></table></div></section>`;
+}
+function pTahminler(){
+  const frows = state.forecasts.map(f=>`<tr class="${f.status==='Arşiv'?'arc':''}">
+    <td><span class="dot" style="background:${f.color}"></span>${esc(f.name)}</td><td><span class="pill ${typePill(f.type)}">${f.type}</span></td><td>${esc(f.owner)}</td><td>${f.level}</td><td>${f.grain||'Aylık'}</td><td class="hint" style="white-space:normal;max-width:260px">${esc(f.updated)}</td>
+    <td class="num">%${f.fill}</td><td class="num">%${f.mape.toLocaleString('tr-TR')}</td><td class="${f.status==='Canlı'?'st-live':'st-frz'}">${f.status}</td>
+    <td><input type="checkbox" data-act="cockpit-sel" data-id="${f.id}" ${state.cockpitSel.includes(f.id)?'checked':''} aria-label="Kokpitte göster"></td>
+    <td>${f.type==='Model'?`<button class="btn sm" data-act="run-model" data-id="${f.id}">Çalıştır</button>`:f.type==='Manuel'?`<a class="btn sm" href="#/giris/${f.id}" style="display:inline-block">Gir</a>`:f.type==='Türetilmiş'?`<button class="btn sm" data-act="show-rule" data-id="${f.id}">Kuralı gör</button>`:f.type==='Yüklenen'?`<button class="btn sm" data-act="reupload" data-id="${f.id}">Yeniden yükle</button>`:f.status==='Canlı'?`<button class="btn sm" data-act="freeze" data-id="${f.id}">Dondur</button>`:`<button class="btn sm" data-act="detail" data-id="${f.id}">Detay</button>`}</td></tr>`).join('');
+  const srows = state.scenarios.map(s=>{ const r=scenarioSeries(s); const eff=s.lastRun?pct(sum(r.out),r.baseTotal):null; return `<tr>
+    <td><input type="checkbox" data-act="scen-sel" data-id="${s.id}" ${state.compareSel.includes(s.id)?'checked':''} aria-label="Seç"></td>
+    <td><a href="#/senaryo/${s.id}" style="font-weight:600">${esc(s.name)}</a>${s.moved?' <span class="pill p-sen">Tahminde</span>':''}</td><td>${esc(fc(s.base).name)}</td>
+    <td>${fc(s.base).type==='Model'? (s.tufe.some((v,i)=>v!==TUFE_BASE[i])?'TÜFE':'Baz') : '<span class="mute">Yok, baz manuel</span>'}</td>
+    <td>${s.rules.length? s.rules.map(r=>`${r.type} ${r.type==='Çarpan'?fmtP(r.param):fmt(r.param)}`).join(', ') : '<span class="mute">Yok</span>'}</td>
+    <td class="num ${eff==null?'mute':eff<0?'bad':'good'}">${eff==null?'Çalıştırılmadı':fmtP(eff)}</td><td>${s.lastRun||'<span class="mute">Yok</span>'}</td><td>${s.lastRun?(s.driversDirty?'Değişti, çalıştır':'Çalıştırıldı'):'Taslak'}</td>
+    <td><a class="btn sm" href="#/senaryo/${s.id}" style="display:inline-block">Aç</a> <button class="btn sm" data-act="del-scen" data-id="${s.id}">Sil</button></td></tr>`; }).join('');
+  return `
+  <div class="row"><div class="grow"><h1>Tahminler</h1><div class="sub">Aktif dönem ${state.cycle.period}, freeze ${state.cycle.freeze}, ufuk ${state.cycle.horizon}, son snapshot ${state.cycle.snapshot}</div></div>
+    <button class="btn" data-act="new-scenario">Yeni senaryo</button><button class="btn pri" data-act="wizard">Yeni tahmin</button></div>
+  <section class="panel"><div class="head"><div class="grow"><h2>Tahmin listesi</h2><div class="hint">Kalıcı tahminler. Kokpit, karşılaştırma, doğruluk ve raporlar bu listeden beslenir.</div></div><input type="search" class="sel" style="width:200px" placeholder="Ara" aria-label="Tahmin ara"></div>
+    <div class="scroll"><table class="tbl"><thead><tr><th>Ad</th><th>Tip</th><th>Sahip</th><th>Seviye</th><th>Dönem</th><th>Son güncelleme</th><th class="num">Doluluk</th><th class="num">MAPE lag 1</th><th>Durum</th><th>Kokpit</th><th></th></tr></thead><tbody>${frows}</tbody></table></div></section>
+  <section class="panel"><div class="head"><div class="grow"><h2>Senaryolar</h2><div class="hint">Deneme alanı. Baz tahmin + sürücü değişiklikleri + çıktı kuralları. Tik ile tahmin listesine taşınır, kendiliğinden silinmez.</div></div>
+    <a class="btn" href="#/karsilastir" style="display:inline-block">Seçilenleri kıyasla</a><button class="btn" data-act="move-selected">Seçilenleri tahmine taşı</button></div>
+    <div class="scroll"><table class="tbl"><thead><tr><th style="width:36px"></th><th>Ad</th><th>Baz tahmin</th><th>Sürücü</th><th>Kural</th><th class="num">Toplam etki</th><th>Son çalıştırma</th><th>Durum</th><th></th></tr></thead><tbody>${srows||'<tr><td colspan="9" class="empty">Henüz senaryo yok. Yeni senaryo ile başla.</td></tr>'}</tbody></table></div></section>
+  <div class="legend"><span class="lbl">Tip</span><span><span class="pill p-model">Model</span> çalıştırılır, elle değişmez</span><span><span class="pill p-man">Manuel</span> ekip girer, freeze dışı dönemler</span><span><span class="pill p-tur">Türetilmiş</span> kuralla hesaplanır, kural kilitlidir</span><span><span class="pill p-yuk">Yüklenen</span> dışarıdan sabit</span><span><span class="pill p-sen">Senaryodan</span> taşınmış senaryo, canlı veya dondurulmuş</span></div>`;
+}
+
+function pGiris(r){
+  const f=fc(r.id); if(!f||f.type!=='Manuel') return `<div class="empty">Bu tahmin manuel değil. <a href="#/tahminler">Tahminler</a></div>`;
+  const e=initEntry(f.id); const T=f.reasonThreshold||10;
+  const tot = FUT.map((m,i)=> e.rows.reduce((a,row)=>a+(row.val[i]??row.ml[i]),0));
+  const grid = e.rows.map((row,ri)=>`<tr><td>${esc(row.name)}</td>${FUT.map((m,ci)=>{ const v=row.val[ci]; const chg=row.reason[ci]; return `<td class="${chg?'ovr':''}" id="c-${ri}-${ci}"><input type="text" inputmode="decimal" value="${v==null?'':fmt(v)}" placeholder="${fmt(row.ml[ci])}" data-act="cell" data-r="${ri}" data-c="${ci}" aria-label="${esc(row.name)} ${m}"></td>`; }).join('')}<td><span class="c tot">${fmt(sum(row.val.map((v,i)=>v??row.ml[i])))}</span></td></tr>`).join('');
+  return `
+  <div class="crumb"><a href="#/tahminler">Tahminler</a> / ${esc(f.name)}</div>
+  <div class="row"><div class="grow"><h1>${esc(f.name)}: içerik girişi</h1><div class="sub">Kapsamınız: Marmara, ${f.level}, son kayıt ${esc(f.updated)}${state.unsaved?`, <span class="amber">${state.unsaved} kaydedilmemiş hücre</span>`:''}</div></div>
+    <button class="btn" data-act="excel-dl">Excel indir</button><button class="btn" data-act="excel-ul">Excel yükle</button><button class="btn" data-act="copy-ref" data-id="${f.id}">Boşları referansla doldur</button><button class="btn pri" data-act="save-entry" data-id="${f.id}">Kaydet</button></div>
+  <div class="infobox">Geçmiş ve freeze dönemleri (${state.cycle.freeze}) bu tabloda yok; değiştirilemezler. Boş hücrede silik görünen değer referans (ML talep tahmini). Referanstan %${T} ve üzeri sapmada gerekçe sorulur.</div>
+  <div class="panel pad row"><div class="fld"><span class="lbl">Ölçü</span><div class="seg"><button class="on">Adet</button><button>Ciro</button></div></div><div class="grow"></div>
+    <div class="fld"><span class="lbl">Toplu işlem (seçili aralık)</span><div class="row"><button class="btn sm" data-act="bulk" data-kind="pct" data-id="${f.id}">Yüzde uygula</button><button class="btn sm" data-act="bulk" data-kind="total" data-id="${f.id}">Toplam gir ve dağıt</button><button class="btn sm" data-act="undo">Geri al</button></div></div></div>
+  <div class="row" style="align-items:flex-start;gap:16px">
+    <section class="panel" style="flex:999 1 620px;min-width:0"><div class="scroll"><table class="g"><thead><tr><th>Bölge</th>${FUT.map(m=>`<th>${m}</th>`).join('')}<th>Toplam</th></tr></thead><tbody>${grid}
+      <tr><td>Marmara toplam</td>${tot.map(v=>`<td><span class="c tot">${fmt(v)}</span></td>`).join('')}<td><span class="c tot">${fmt(sum(tot))}</span></td></tr></tbody></table></div>
+      <div class="legend" style="padding:10px 14px;border-top:1px solid var(--line)"><span><span style="display:inline-block;width:12px;height:12px;background:var(--panel);border:1px solid var(--line);vertical-align:-2px;margin-right:6px"></span>Düzenlenebilir</span><span><span style="display:inline-block;width:12px;height:12px;background:var(--ovr);border:1px solid var(--line);vertical-align:-2px;margin-right:6px"></span>Gerekçeli değişiklik</span><span style="font-style:italic">Silik: boş hücre, referans kabul edilir</span></div></section>
+    <aside style="flex:1 1 280px;max-width:340px;display:flex;flex-direction:column;gap:14px"><div id="cellcard">${cellCard(f.id)}</div>
+      <section class="panel pad"><div class="lbl" style="margin-bottom:6px">Marmara toplam, adet</div>${lineChart([{name:'ML referans',color:'#2563eb',values:fut(ML)},{name:esc(f.name),color:f.color,values:tot}],{labels:FUT,h:170,label:'Marmara toplam'})}</section></aside>
+  </div>`;
+}
+function cellCard(fid){
+  const e=state.entry[fid]; const s=state.selCell; if(!s) return `<section class="panel pad"><h2>Seçili hücre</h2><div class="hint" style="margin-top:6px">Tablodan bir hücre seç; referans, geçen yıl, bütçe ve konsensüsün bu hücrede hangi kaynağı seçtiği burada görünür.</div></section>`;
+  const row=e.rows[s.r], v=row.val[s.c], ml=row.ml[s.c], rs=row.reason[s.c]; const d=v==null?0:pct(v,ml);
+  return `<section class="panel pad"><div class="lbl">Seçili hücre</div><div style="font-size:15px;font-weight:600;margin:4px 0 6px">${esc(row.name)}, ${FUT[s.c]}</div>
+    <div class="kv"><span>Girilen</span><span style="font-weight:600">${v==null?'<span class="mute">boş, referans geçerli</span>':fmt(v)}</span></div>
+    <div class="kv"><span>ML referans</span><span>${fmt(ml)}</span></div>
+    <div class="kv"><span>Fark</span><span class="${Math.abs(d)>=10?'amber':''}">${v==null?'0':fmt(v-ml)+' ('+fmtP(d)+')'}</span></div>
+    <div class="kv"><span>Geçen yıl</span><span>${fmt(ml*0.9)}</span></div><div class="kv"><span>Bütçe 2027</span><span>${fmt(ml*1.06)}</span></div>
+    <div class="kv"><span>Konsensüs v2 seçimi</span><span>${v==null?'ML (zincir, 3. adım)':'Bu tahmin (zincir, 2. adım)'}</span></div>
+    ${rs?`<div style="margin-top:10px;font-size:12px"><span class="lbl">Gerekçe</span><div><strong>${esc(rs.code)}</strong>${rs.note?': '+esc(rs.note):''}</div><div class="hint">${esc(rs.by)}, ${esc(rs.at)}, önceki ${fmt(rs.prev)}</div></div>`:''}
+    <div class="row" style="margin-top:10px"><button class="btn sm" data-act="reason" data-r="${s.r}" data-c="${s.c}" data-id="${fid}">Gerekçe ekle veya düzenle</button><button class="btn sm" data-act="history">Değişiklik geçmişi</button></div></section>`;
+}
+
+function pKonsensus(){
+  if(!state.consDraft) state.consDraft={name:'Konsensüs v3',desc:'Planlama öncelikli zincir; C sınıfı ürünlerde doğrudan model; 4. aydan sonra ağırlıklı',kind:'Öncelik zinciri',chain:['plan','sales','ml'],weights:{ml:0.6,plan:0.4},exceptions:[{cond:'ABC sınıfı = C',rule:'Doğrudan: ML talep tahmini'},{cond:'Ufuk 4. ay ve sonrası',rule:'Ağırlıklı: ML 0,6, Planlama 0,4'}],empty:'ML talep tahmini',cockpit:'v2 nin yerine'};
+  const d=state.consDraft; const srcs=state.forecasts.filter(f=>f.type!=='Türetilmiş'&&f.status!=='Arşiv');
+  const chain = d.chain.map((id,i)=>`<div class="step"><div class="rn">${i+1}</div><select class="sel" data-act="chain-set" data-i="${i}" aria-label="${i+1}. kaynak">${srcs.map(f=>`<option value="${f.id}" ${f.id===id?'selected':''}>${esc(f.name)}</option>`).join('')}</select><span class="pill ${typePill(fc(id).type)}">${fc(id).type}</span><button class="btn sm" data-act="chain-del" data-i="${i}">Kaldır</button></div>`).join('');
+  const weighted = srcs.map(f=>`<div class="step"><div class="grow">${esc(f.name)}</div><input type="text" class="sel" style="width:80px" value="${(d.weights[f.id]??0).toLocaleString('tr-TR')}" data-act="weight" data-id="${f.id}" aria-label="${esc(f.name)} ağırlığı"></div>`).join('');
+  const share = d.kind==='Öncelik zinciri' ? [['Planlama',58,'#0e9f8f'],['Satış',19,'#16a34a'],['ML',23,'#2563eb']] : [['Ağırlıklı karışım',100,'#5f2d8a']];
+  return `
+  <div class="crumb"><a href="#/tahminler">Tahminler</a> / Konsensüs tanımları</div>
+  <div class="row"><div class="grow"><h1>Yeni konsensüs tanımı <span class="mute" style="font-weight:400">(v3 olarak kaydedilir)</span></h1></div><a class="btn" href="#/tahminler" style="display:inline-block">Vazgeç</a><button class="btn pri" data-act="cons-save">Kaydet ve kilitle</button></div>
+  <div class="warnbox">Kaydedilen kural değiştirilemez. Değişiklik gerekirse yeni tanım açılır; eski tanım arşive gider, geçmiş değerleri ve doğruluğu kıyaslanabilir kalır.</div>
+  <section class="panel pad row" style="gap:20px;align-items:flex-end"><div class="fld" style="flex:1 1 200px"><label class="lbl" for="cn">Ad</label><input id="cn" class="sel" value="${esc(d.name)}" data-act="cons-field" data-k="name"></div><div class="fld" style="flex:2 1 320px"><label class="lbl" for="cd">Açıklama</label><input id="cd" class="sel" value="${esc(d.desc)}" data-act="cons-field" data-k="desc"></div><div class="fld"><label class="lbl" for="cl">Hesap seviyesi</label><select id="cl" class="sel"><option>SKU</option><option>Bölge</option></select></div><div class="fld"><label class="lbl" for="cg">Geçerlilik</label><select id="cg" class="sel"><option>Kasım 2026 snapshot tan itibaren</option><option>Hemen</option></select></div></section>
+  <div class="row" style="align-items:flex-start;gap:18px">
+    <div style="flex:3 1 560px;min-width:0;display:flex;flex-direction:column;gap:14px">
+      <section class="panel pad" style="display:flex;flex-direction:column;gap:12px"><div class="row"><h2 class="grow">1. Ana kural</h2><div class="seg">${['Öncelik zinciri','Ağırlıklı ortalama','Formül'].map(k=>`<button data-act="cons-kind" data-v="${k}" class="${d.kind===k?'on':''}">${k}</button>`).join('')}</div></div>
+        ${d.kind==='Öncelik zinciri'?`<div class="hint">Dolu olan ilk kaynak alınır. Boş hücre bir sonraki adıma geçer.</div>${chain}<button class="btn" data-act="chain-add" style="align-self:flex-start">Adım ekle</button>`
+        : d.kind==='Ağırlıklı ortalama'?`<div class="hint">Ağırlıklar toplamı 1 olmalı. Boş kaynak hesaptan düşer, kalanlar yeniden normalize edilir.</div>${weighted}`
+        :`<div class="hint">Kaynak adları ve aritmetik; hücre bazında hesaplanır.</div><input class="sel" value="min(Planlama tahmini, 1,1 * ML talep tahmini)" aria-label="Formül">`}
+      </section>
+      <section class="panel pad" style="display:flex;flex-direction:column;gap:12px"><div class="row"><h2 class="grow">2. İstisnalar <span class="mute" style="font-weight:400">(isteğe bağlı)</span></h2><button class="btn sm" data-act="exc-add">İstisna ekle</button></div><div class="hint">Belirli kapsam veya dönem için ana kural yerine başka kural. Önce istisna, sonra ana kural bakılır.</div>
+        <table class="tbl"><thead><tr><th>Koşul</th><th>Kural</th><th></th></tr></thead><tbody>${d.exceptions.map((x,i)=>`<tr><td>${esc(x.cond)}</td><td>${esc(x.rule)}</td><td style="text-align:right"><button class="btn sm" data-act="exc-del" data-i="${i}">Kaldır</button></td></tr>`).join('')||'<tr><td colspan="3" class="mute">İstisna yok</td></tr>'}</tbody></table></section>
+      <section class="panel pad row" style="gap:20px"><div class="fld" style="min-width:220px"><label class="lbl" for="ce">Tüm kaynaklar boşsa</label><select id="ce" class="sel"><option>ML talep tahmini</option><option>Geçen yıl</option><option>Boş bırak, uyarı ver</option></select></div><div class="fld" style="min-width:220px"><label class="lbl" for="cu">Seviyeler arası tutarlılık</label><select id="cu" class="sel"><option>SKU dan yukarı topla</option><option>Bölge den aşağı dağıt (geçmiş pay)</option></select></div><div class="fld" style="min-width:220px"><label class="lbl" for="ck">Kokpitte göster</label><select id="ck" class="sel"><option>Evet, v2 nin yerine</option><option>Evet, v2 ile birlikte</option><option>Hayır</option></select></div></section>
+    </div>
+    <aside style="flex:2 1 340px;min-width:0;display:flex;flex-direction:column;gap:14px">
+      <section class="panel pad"><h2>Önizleme: hangi kaynak seçiliyor</h2><div class="hint" style="margin:4px 0 10px">Bugünkü verilerle, Ocak 2027 ve sonrası, hücre payı</div><div class="bar" aria-hidden="true">${share.map(s=>`<div style="width:${s[1]}%;background:${s[2]}"></div>`).join('')}</div><div class="legend" style="margin-top:8px">${share.map(s=>`<span><span class="dot" style="background:${s[2]}"></span>${s[0]} %${s[1]}</span>`).join('')}</div>
+        <table class="tbl" style="margin-top:10px"><thead><tr><th>Örnek seri</th><th>Oca</th><th>Şub</th><th>Mar</th><th>Nis</th><th>May</th></tr></thead><tbody><tr><td>SKU 1042 (A), Marmara</td><td>Planlama</td><td>Planlama</td><td>Satış</td><td>Ağırlıklı</td><td>Ağırlıklı</td></tr><tr><td>SKU 2210 (C), Ege</td><td>ML</td><td>ML</td><td>ML</td><td>ML</td><td>ML</td></tr><tr><td>SKU 3005 (yeni)</td><td>Satış</td><td>Satış</td><td>Satış</td><td>Satış</td><td>Satış</td></tr></tbody></table></section>
+      <section class="panel pad"><h2>v2 ile fark</h2><div class="kv"><span>Toplam, 18 dönem</span><span class="good">+%1,2</span></div><div class="kv"><span>Kaynağı değişen hücre</span><span>3.140 / 21.600</span></div><div class="kv"><span>v2 MAPE lag 1, son 6 ay</span><span>%3,3</span></div><div class="kv"><span>v3 geriye dönük MAPE lag 1</span><span style="font-weight:600">%3,1</span></div><div class="hint" style="margin-top:6px">Geriye dönük değer, yeni kuralın geçmiş snapshot lara uygulanmasıyla hesaplanır.</div></section>
+      <section class="panel pad"><div class="lbl" style="margin-bottom:6px">Önceki tanımlar</div>${state.forecasts.filter(f=>f.type==='Türetilmiş').map(f=>`<div class="kv"><span>${esc(f.name)}: ${esc(f.updated.replace('Kural: ',''))}</span><span class="${f.status==='Canlı'?'st-live':'st-frz'}">${f.status==='Canlı'?'Aktif':'Arşiv'}</span></div>`).join('')}</section>
+    </aside></div>`;
+}
+
+function pSenaryo(r){
+  const s=sc(r.id); if(!s) return `<div class="empty">Senaryo bulunamadı. <a href="#/tahminler">Tahminler</a></div>`;
+  const tab=r.query.tab||'suruculer'; const base=fc(s.base); const isModel=base.type==='Model'; const res=scenarioSeries(s);
+  const total=sum(res.out), eff=pct(total,res.baseTotal);
+  const head=`
+  <div class="crumb"><a href="#/tahminler">Tahminler</a> / Senaryolar</div>
+  <div class="row"><div class="grow"><div class="row" style="gap:10px"><h1>${esc(s.name)}</h1>${s.driversDirty&&isModel?'<span class="badge">Sürücü değişti, çalıştır</span>':''}${s.moved?'<span class="pill p-sen">Tahmin listesinde</span>':''}</div></div>
+    <button class="btn danger" data-act="del-scen" data-id="${s.id}">Sil</button><button class="btn" data-act="move-one" data-id="${s.id}">Tahmine taşı</button><button class="btn" data-act="save-scen" data-id="${s.id}">Kaydet</button><button class="btn pri" data-act="run-scen" data-id="${s.id}">Çalıştır</button></div>
+  <section class="panel pad row" style="gap:20px;align-items:flex-end">
+    <div class="fld" style="min-width:220px"><label class="lbl" for="sb">Baz tahmin</label><select id="sb" class="sel" data-act="scen-base" data-id="${s.id}">${state.forecasts.filter(f=>f.status!=='Arşiv').map(f=>`<option value="${f.id}" ${f.id===s.base?'selected':''}>${esc(f.name)} (${f.type})</option>`).join('')}</select></div>
+    <div class="fld" style="min-width:160px"><span class="lbl">Kapsam</span><button class="btn" data-act="scope-open" data-target="scenario:${s.id}" style="text-align:left">${esc(s.scope)} ▾</button></div>
+    <div class="fld" style="min-width:160px"><label class="lbl" for="ss">Uygulama başlangıcı</label><select id="ss" class="sel" data-act="scen-start" data-id="${s.id}">${FUT.slice(0,6).map((m,i)=>`<option value="${i}" ${i===s.start?'selected':''}>${m}</option>`).join('')}</select><div class="hint">${state.cycle.freeze} freeze, seçilemez</div></div>
+    <div class="fld" style="min-width:140px"><label class="lbl" for="su">Ufuk</label><select id="su" class="sel"><option>Mart 2028</option><option>Aralık 2027</option></select></div>
+    <div class="fld grow" style="min-width:200px"><label class="lbl" for="sd">Açıklama</label><input id="sd" class="sel" value="${esc(s.desc)}" data-act="scen-desc" data-id="${s.id}"></div></section>
+  <div class="tabs"><a href="#/senaryo/${s.id}?tab=suruculer" class="${tab==='suruculer'?'on':''}">Sürücüler <span class="mute" style="font-weight:400">(${isModel?(s.tufe.some((v,i)=>v!==TUFE_BASE[i])?1:0)+' değişiklik':'kapalı'})</span></a><a href="#/senaryo/${s.id}?tab=kurallar" class="${tab==='kurallar'?'on':''}">Kurallar <span class="mute" style="font-weight:400">(${s.rules.length})</span></a></div>`;
+  let body='';
+  if(tab==='suruculer'){
+    if(!isModel){ body=`<div class="panel pad"><h2>Sürücüler bu senaryoda kapalı</h2><div class="hint" style="margin-top:6px">Baz tahmin "${esc(base.name)}" bir model değil; sürücü değişikliği modeli yeniden çalıştırır, manuel veya türetilmiş tahmini etkilemez. Bu bazda yalnızca çıktı kuralları uygulanır. <a href="#/senaryo/${s.id}?tab=kurallar">Kurallar sekmesine geç</a></div></div>`; }
+    else {
+      const drvs=[['tufe','TÜFE'],['fx','EUR/TRY'],['pax','Yolcu sayısı'],['diesel','Mazot fiyatı']];
+      const chart = lineChart([{name:'TÜFE geçmiş',color:'#6b7280',values:TUFE_PAST.concat(Array(15).fill(null))},{name:'Baz (OVP)',color:'#6b7280',dash:true,values:Array(14).fill(null).concat([TUFE_PAST[14]],TUFE_BASE)},{name:'Senaryo',color:'#d97706',width:2.5,values:Array(14).fill(null).concat([TUFE_PAST[14]],s.tufe)}],{today:TODAY,h:220,fmt:v=>'%'+Math.round(v),label:'TÜFE'});
+      body=`<div class="row" style="align-items:flex-start;gap:18px">
+      <aside class="panel" style="width:240px;padding:10px;display:flex;flex-direction:column;gap:2px"><div class="lbl" style="padding:6px 12px 10px">Model sürücüleri</div>${drvs.map(([k,n])=>`<button class="drv ${state.driverSel===k?'on':''}" data-act="drv" data-k="${k}"><span>${n}</span>${k==='tufe'&&s.tufe.some((v,i)=>v!==TUFE_BASE[i])?'<span class="badge">değişti</span>':'<span class="mute" style="font-size:12px">baz</span>'}</button>`).join('')}
+        <div class="hint" style="padding:12px 12px 4px">Sürücü seti</div><select class="sel" aria-label="Sürücü seti" style="margin:0 8px;width:auto"><option>Bu senaryoya özel</option><option>Baz (OVP 2027)</option><option>Yüksek enflasyon</option></select><button class="btn" data-act="toast" data-m="Sürücü seti kaydedildi" style="margin:8px">Set olarak kaydet</button></aside>
+      <section class="panel pad" style="flex:999 1 560px;min-width:0;display:flex;flex-direction:column;gap:14px">
+        ${state.driverSel==='tufe'?`<div class="row"><div class="grow"><h2>TÜFE, yıllık %</h2><div class="hint">Kaynak: price_index tablosu, geçmiş salt okunur, kapsam global</div></div><span class="lbl">Giriş yöntemi</span><div class="seg">${['Sabit','Yüzde artış','Trend uzat','Tablo','Resmi set'].map(m=>`<button data-act="drv-method" data-id="${s.id}" data-v="${m}" class="${s.method===m?'on':''}">${m}</button>`).join('')}</div></div>
+        ${s.method==='Sabit'?`<div class="row"><label for="dv">Tüm açık dönemlere</label><input id="dv" type="text" class="sel" style="width:100px" value="${s.tufe[s.start].toLocaleString('tr-TR')}" data-act="drv-const" data-id="${s.id}"><span class="hint">yazılır; tabloda tek tek de değiştirilebilir</span></div>`:s.method==='Yüzde artış'?`<div class="row"><label for="dv">Baz üzerine her dönem</label><input id="dv" type="text" class="sel" style="width:100px" value="+5" data-act="drv-pct" data-id="${s.id}"><span class="hint">puan eklenir</span></div>`:`<div class="hint">${s.method} yöntemi bu prototipte tabloyu değiştirmez; değerleri doğrudan tabloya gir.</div>`}
+        ${chart}
+        <div class="scroll"><table class="g"><thead><tr><th>Dönem</th><th>Kas 26</th><th>Ara 26</th>${FUT.map(m=>`<th>${m}</th>`).join('')}</tr></thead><tbody>
+          <tr><td>Baz (OVP)</td><td><span class="c frz">36,0</span></td><td><span class="c frz">34,5</span></td>${TUFE_BASE.map(v=>`<td><span class="c">${v.toLocaleString('tr-TR')}</span></td>`).join('')}</tr>
+          <tr><td>Senaryo</td><td><span class="c frz">36,0</span></td><td><span class="c frz">34,5</span></td>${s.tufe.map((v,i)=> i<s.start?`<td><span class="c past">${v.toLocaleString('tr-TR')}</span></td>`:`<td ${v!==TUFE_BASE[i]?'class="ovr"':''}><input type="text" inputmode="decimal" value="${v.toLocaleString('tr-TR')}" data-act="drv-cell" data-id="${s.id}" data-i="${i}" aria-label="${FUT[i]} senaryo TÜFE"></td>`).join('')}</tr>
+          <tr><td>Fark</td><td><span class="c frz">0</span></td><td><span class="c frz">0</span></td>${s.tufe.map((v,i)=>`<td><span class="c ${v-TUFE_BASE[i]!==0?'amber':''}">${(v-TUFE_BASE[i]>0?'+':'')+(v-TUFE_BASE[i]).toLocaleString('tr-TR',{maximumFractionDigits:1})}</span></td>`).join('')}</tr></tbody></table></div>
+        <div class="hint">Gri hücreler geçmiş ve freeze; değiştirilemez. Sürücü değişikliği için Çalıştır gerekir; etkisi aşağıdaki önizlemede çalıştırma sonrası görünür.</div>`
+        :`<h2>${drvs.find(d=>d[0]===state.driverSel)[1]}</h2><div class="hint" style="margin-top:6px">Bu sürücü senaryoda baz değerinde. Prototipte yalnızca TÜFE düzenlenebilir; gerçek üründe her sürücü aynı grafik ve tabloyla gelir.</div>`}
+      </section></div>`;
+    }
+  } else {
+    const rules = s.rules.map((r,i)=>{ const e=res.ruleEffects[i]; return `<div class="rule"><div class="rn">${i+1}</div><div class="grow" style="min-width:0"><div style="font-size:14px;font-weight:600">${r.type} ${r.type==='Çarpan'?fmtP(r.param):fmt(r.param)}</div><div class="hint">${esc(r.scope)}, ${FUT[r.start]}${r.end>=14?' ve sonrası':' ile '+FUT[r.end]}, gerekçe: ${esc(r.reason)}${r.note?', "'+esc(r.note)+'"':''}</div></div><div style="text-align:right"><div class="lbl">Etki</div><div class="${e<0?'bad':e>0?'good':'mute'}" style="font-size:15px">${e===0?'0':fmtK(e)+' adet'}</div></div><button class="btn sm" data-act="rule-up" data-id="${s.id}" data-i="${i}" aria-label="Yukarı">↑</button><button class="btn sm" data-act="rule-del" data-id="${s.id}" data-i="${i}">Kaldır</button></div>`; }).join('');
+    body=`<div class="row" style="align-items:flex-start;gap:18px">
+      <section style="flex:1 1 440px;min-width:0;display:flex;flex-direction:column;gap:10px"><div class="row"><h2 class="grow">Kural listesi</h2><span class="hint">Sıralı uygulanır</span></div>${rules||'<div class="rule" style="border-style:dashed"><div class="mute">Kural yok. Sağdaki formdan ekle.</div></div>'}
+        <section class="panel" style="margin-top:6px"><div class="head"><h2>Etki ayrışımı</h2></div><table class="tbl"><thead><tr><th>Adım</th><th class="num">Adet</th><th class="num">%</th></tr></thead><tbody>
+          <tr><td>Baz (${esc(base.name)})</td><td class="num">${fmtK(res.baseTotal)}</td><td></td></tr>
+          ${isModel?`<tr><td>Sürücü: TÜFE</td><td class="num ${res.ran?(res.driverEffect<0?'bad':'good'):'mute'}">${res.ran?fmtK(res.driverEffect):'Çalıştır gerekli'}</td><td class="num">${res.ran?fmtP(pct(res.driverEffect+res.baseTotal,res.baseTotal)):''}</td></tr>`:''}
+          ${s.rules.map((r,i)=>`<tr><td>Kural ${i+1}: ${r.type}</td><td class="num ${res.ruleEffects[i]<0?'bad':'good'}">${fmtK(res.ruleEffects[i])}</td><td class="num">${fmtP(pct(res.ruleEffects[i]+res.baseTotal,res.baseTotal))}</td></tr>`).join('')}
+          <tr style="font-weight:600"><td>Senaryo sonucu</td><td class="num">${fmtK(total)}</td><td class="num ${eff<0?'bad':'good'}">${fmtP(eff)}</td></tr></tbody></table></section></section>
+      <section class="panel pad" style="flex:1 1 380px;min-width:0;display:flex;flex-direction:column;gap:12px"><h2>Kural ekle</h2>
+        <div class="fld"><label class="lbl" for="rt">Kural tipi</label><select id="rt" class="sel"><option>Çarpan</option><option>Ek değer</option><option>Tavan</option><option>Taban</option><option>Kaydırma</option><option>Olay</option><option>Lansman eğrisi</option><option>Sonlandırma</option></select></div>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px"><div class="fld"><span class="lbl">Kapsam</span><button class="btn" data-act="scope-open" data-target="rule" style="text-align:left" id="rk" data-v="${esc((state.ruleScope&&state.ruleScope.label)||'Tüm kapsam')}">${esc((state.ruleScope&&state.ruleScope.label)||'Tüm kapsam')} ▾</button></div><div class="fld"><label class="lbl" for="rl">Seviye</label><select id="rl" class="sel"><option>Bölge</option><option>SKU</option></select></div>
+        <div class="fld"><label class="lbl" for="rb">Başlangıç</label><select id="rb" class="sel">${FUT.map((m,i)=>`<option value="${i}" ${i===2?'selected':''}>${m}</option>`).join('')}</select></div><div class="fld"><label class="lbl" for="re">Bitiş</label><select id="re" class="sel"><option value="14">Ufuk sonu</option>${FUT.map((m,i)=>`<option value="${i}">${m}</option>`).join('')}</select></div></div>
+        <div class="fld"><label class="lbl" for="rp">Parametre</label><div class="row"><input id="rp" type="text" class="sel" style="width:120px" value="-10"><span class="hint">Çarpan: yüzde; ek değer, tavan, taban: adet</span></div></div>
+        <div class="fld"><label class="lbl" for="rg">Gerekçe kodu</label><select id="rg" class="sel">${REASONS.map(x=>`<option>${x}</option>`).join('')}</select></div>
+        <div class="fld"><label class="lbl" for="rn">Not</label><input id="rn" class="sel" placeholder="Gerekçe kodunda not zorunluysa boş geçilemez"></div>
+        <div class="row"><button class="btn pri" data-act="rule-add" data-id="${s.id}">Kuralı ekle</button><span class="hint">Kurallar baz model olmasa da çalışır. Freeze dönemine kural yazılamaz.</span></div></section></div>`;
+  }
+  const preview=`<section class="panel pad row" style="gap:18px;align-items:flex-start"><div style="flex:999 1 480px;min-width:0"><div class="row" style="margin-bottom:6px"><h2>Önizleme</h2><span class="hint">Adet, toplam${s.lastRun?', son çalıştırma '+s.lastRun:', henüz çalıştırılmadı'}</span></div>
+    ${lineChart([{name:'Gerçekleşen',color:'#0e9f8f',values:ACT.concat(Array(17).fill(null))},{name:'Baz: '+base.name,color:base.color==='#111827'?'#2563eb':base.color,values:base.values.map((v,i)=>i<13?null:(v??ML[i]))},{name:'Senaryo',color:'#d97706',dash:true,width:2.5,values:ML.map((v,i)=>i<15?null:res.out[i-15])}],{today:TODAY,h:200,label:'Senaryo önizleme'})}</div>
+    <div class="cards" style="flex:0 1 360px"><div class="card"><div class="lbl">Toplam etki</div><div class="v ${eff<0?'bad':'good'}">${fmtP(eff)}</div><div class="hint">${fmtK(total-res.baseTotal)} adet, 15 dönem</div></div>
+      <div class="card"><div class="lbl">Sürücü etkisi</div><div class="v ${res.ran?(res.driverEffect<0?'bad':'good'):'mute'}" style="${res.ran?'':'font-size:15px'}">${isModel?(res.ran?fmtP(pct(res.driverEffect+res.baseTotal,res.baseTotal)):'Çalıştır gerekli'):'Yok'}</div><div class="hint">${isModel?'TÜFE, model çalıştırması':'Baz manuel'}</div></div>
+      <div class="card"><div class="lbl">Kural etkisi</div><div class="v ${sum(res.ruleEffects)<0?'bad':sum(res.ruleEffects)>0?'good':''}">${fmtP(pct(sum(res.ruleEffects)+res.baseTotal,res.baseTotal))}</div><div class="hint">${s.rules.length} kural, anında</div></div>
+      <div class="card"><div class="lbl">Bütçe farkı</div><div class="v ${pct(total,sum(BUD.slice(15)))<0?'bad':'good'}">${fmtP(pct(total,sum(BUD.slice(15))))}</div><div class="hint">Bütçe 2027 ye göre</div></div></div></section>`;
+  return head+body+preview;
+}
+
+function pKarsilastir(){
+  const all = state.forecasts.filter(f=>f.status!=='Arşiv').map(f=>({id:f.id,name:f.name,type:f.type})).concat(state.scenarios.map(s=>({id:s.id,name:s.name,type:'Senaryo'})));
+  const sel = state.compareSel.filter(id=>all.find(a=>a.id===id)).slice(0,4).map(seriesOf);
+  const ref = sel[0];
+  const rows = FUT.map((m,i)=>`<tr><td>${m}</td>${sel.map((s,k)=>{ const v=s.values[15+i]; const d=k&&ref.values[15+i]!=null&&v!=null?pct(v,ref.values[15+i]):null; return `<td class="num">${fmt(v)}</td>${k?`<td class="num ${d==null?'mute':d<0?'bad':'good'}">${d==null?'':fmtP(d)}</td>`:''}`; }).join('')}</tr>`).join('');
+  return `<div class="row"><div class="grow"><h1>Karşılaştır</h1><div class="sub">Tahmin ve senaryoları yan yana; ilk seçilen referans, diğerleri ona göre fark</div></div><button class="btn" data-act="toast" data-m="Karşılaştırma Excel olarak indirildi">Excel indir</button></div>
+  <section class="panel pad"><div class="lbl" style="margin-bottom:8px">Karşılaştırılacaklar (en fazla 4)</div><div class="row" style="gap:16px">${all.map(a=>`<label class="chk"><input type="checkbox" data-act="cmp-sel" data-id="${a.id}" ${state.compareSel.includes(a.id)?'checked':''}>${esc(a.name)} <span class="pill ${typePill(a.type)}">${a.type}</span></label>`).join('')}</div></section>
+  <section class="panel pad">${sel.length?lineChart([{name:'Gerçekleşen',color:'#0e9f8f',values:ACT.concat(Array(17).fill(null))}].concat(sel),{today:TODAY,label:'Karşılaştırma'}):'<div class="empty">En az bir tahmin seç</div>'}</section>
+  <section class="panel"><div class="scroll"><table class="tbl"><thead><tr><th>Dönem</th>${sel.map((s,k)=>`<th class="num">${esc(s.name)}</th>${k?'<th class="num">Fark</th>':''}`).join('')}</tr></thead><tbody>${rows}<tr style="font-weight:600"><td>Toplam</td>${sel.map((s,k)=>{ const t=sum(s.values.slice(15)); const d=k?pct(t,sum(ref.values.slice(15))):null; return `<td class="num">${fmt(t)}</td>${k?`<td class="num ${d<0?'bad':'good'}">${fmtP(d)}</td>`:''}`; }).join('')}</tr></tbody></table></div></section>`;
+}
+
+function pDogruluk(){
+  const lags=[1,2,3,4,5,6];
+  const rows = state.forecasts.filter(f=>f.type!=='Yüklenen').map(f=>`<tr class="${f.status==='Arşiv'?'arc':''}"><td><span class="dot" style="background:${f.color}"></span>${esc(f.name)}</td><td><span class="pill ${typePill(f.type)}">${f.type}</span></td>${lags.map(l=>`<td class="num">%${(f.mape*(1+0.18*(l-1))).toLocaleString('tr-TR',{maximumFractionDigits:1})}</td>`).join('')}<td class="num ${f.mape>5?'amber':''}">${(f.mape>5?'+':'')+(f.mape-4.4).toLocaleString('tr-TR',{maximumFractionDigits:1})}</td></tr>`).join('');
+  const fva=[['Naive (geçen yıl)',11.2],['ML talep tahmini',4.5],['Satış tahmini',6.1],['Planlama tahmini',5.2],['Konsensüs v2',3.3]];
+  return `<div class="row"><div class="grow"><h1>Doğruluk</h1><div class="sub">Her ay kapanışındaki snapshot ile gerçekleşen kıyaslanır; lag, snapshot ile hedef dönem arası ay sayısı</div></div>
+    <div class="seg"><button class="on">MAPE</button><button>WMAPE</button><button>Bias</button></div><select class="sel" style="width:auto"><option>Son 6 ay</option><option>Son 12 ay</option></select></div>
+  <section class="panel"><div class="head"><h2>Lag bazında MAPE</h2><span class="hint">Hacim ağırlıklı, tüm kapsam</span></div><div class="scroll"><table class="tbl"><thead><tr><th>Tahmin</th><th>Tip</th>${lags.map(l=>`<th class="num">Lag ${l}</th>`).join('')}<th class="num">Bias puan</th></tr></thead><tbody>${rows}</tbody></table></div></section>
+  <div class="row" style="align-items:flex-start;gap:16px">
+    <section class="panel pad" style="flex:1 1 420px"><h2>Katkı merdiveni (FVA)</h2><div class="hint" style="margin:4px 0 10px">Her adım bir öncekinden ne kadar iyi; puan olarak MAPE farkı</div>${fva.map((x,i)=>`<div class="kv"><span>${x[0]}</span><span><span class="mute">%${x[1].toLocaleString('tr-TR')}</span> ${i?`<span class="${fva[i-1][1]-x[1]>0?'good':'bad'}" style="margin-left:10px">${(fva[i-1][1]-x[1]>0?'+':'')+(fva[i-1][1]-x[1]).toLocaleString('tr-TR',{maximumFractionDigits:1})} puan</span>`:''}</span></div>`).join('')}</section>
+    <section class="panel pad" style="flex:1 1 420px"><h2>En kötü 5 seri, lag 1</h2><table class="tbl" style="margin-top:8px"><thead><tr><th>Seri</th><th>Tahmin</th><th class="num">MAPE</th></tr></thead><tbody><tr><td>SKU 3005, İç Anadolu</td><td>Satış tahmini</td><td class="num bad">%31</td></tr><tr><td>SKU 1188, Ege</td><td>Konsensüs v2</td><td class="num bad">%24</td></tr><tr><td>SKU 2210, Marmara</td><td>ML talep tahmini</td><td class="num amber">%18</td></tr><tr><td>SKU 0421, Akdeniz</td><td>Planlama tahmini</td><td class="num amber">%16</td></tr><tr><td>SKU 1042, Marmara</td><td>Satış tahmini</td><td class="num amber">%14</td></tr></tbody></table></section></div>`;
+}
+function pRaporlar(){ const reps=[['Tahmin özeti','tahmin, seviye, ölçü'],['Kırılım tablosu','satır boyut, sütun dönem'],['Senaryo karşılaştırma','senaryo listesi'],['Bütçe gap','kümülatif, YTD, YTG'],['Doğruluk raporu','metrik x lag x seviye'],['Override raporu','kim, ne, neden, etkisi'],['Çalıştırma günlüğü','tarih aralığı']];
+  return `<div class="row"><div class="grow"><h1>Raporlar</h1><div class="sub">Şablon tabanlı; ekranda, Excel veya PDF</div></div><button class="btn" data-act="toast" data-m="Zamanlanmış rapor eklendi">Zamanlanmış rapor ekle</button></div>
+  <section class="panel"><table class="tbl"><thead><tr><th>Rapor</th><th>Parametreler</th><th></th></tr></thead><tbody>${reps.map(r=>`<tr><td style="font-weight:600">${r[0]}</td><td class="hint">${r[1]}</td><td style="text-align:right"><button class="btn sm" data-act="toast" data-m="${r[0]} ekranda açıldı">Ekranda</button> <button class="btn sm" data-act="toast" data-m="${r[0]} Excel olarak indirildi">Excel</button> <button class="btn sm" data-act="toast" data-m="${r[0]} PDF olarak indirildi">PDF</button></td></tr>`).join('')}</tbody></table></section>`; }
+function pYonetim(){ const items=[['Modeller','ML talep tahmini v2.3, seasonal_naive, driver_regression'],['Sürücü kataloğu','TÜFE, EUR/TRY, Yolcu sayısı, Mazot fiyatı'],['Boyutlar ve hiyerarşiler','Ürün (4 seviye), Bölge (3 seviye), Kanal'],['Çevrim tanımı','Aylık, freeze 2 ay, ufuk 18 ay, snapshot ayın 1 i'],['Gerekçe kodları','7 kod, 3 ü not zorunlu'],['Kullanıcılar ve roller','14 kullanıcı, 4 rol, satır yetkisi bölge bazında'],['Bağlantılar','BigQuery (satış), MS SQL (fiyat listesi)'],['Audit log','Son 30 günde 412 kayıt']];
+  return `<div class="row"><div class="grow"><h1>Yönetim</h1><div class="sub">Kurulum; yalnızca yönetici görür</div></div></div><section class="panel"><table class="tbl"><tbody>${items.map(i=>`<tr><td style="font-weight:600;width:260px">${i[0]}</td><td class="hint">${i[1]}</td><td style="text-align:right"><button class="btn sm" data-act="toast" data-m="${i[0]} bu prototipte yok">Aç</button></td></tr>`).join('')}</tbody></table></section>`; }
+
+/* ---------- modals ---------- */
+function openModal(html,wide){ document.getElementById('modal-root').innerHTML=`<div class="backdrop" data-act="close-bd"><div class="modal ${wide?'wide':''}" role="dialog" aria-modal="true">${html}</div></div>`; const f=document.querySelector('.modal input,.modal select,.modal button'); if(f) f.focus(); }
+function closeModal(){ document.getElementById('modal-root').innerHTML=''; }
+const mh = (t)=>`<div class="mh"><h2 class="grow">${t}</h2><button class="x" data-act="close" aria-label="Kapat">×</button></div>`;
+
+function wizardHtml(){
+  const w=state.wizard; const steps=`<div class="row" style="gap:28px;padding:4px 0 12px;border-bottom:1px solid var(--line)"><div class="stp ${w.step===1?'on':'done'}"><span class="n">1</span>Tip${w.step>1?': '+w.type:''}</div><div class="stp ${w.step===2?'on':w.step>2?'done':''}"><span class="n">2</span>Tanım</div><div class="stp ${w.step===3?'on':''}"><span class="n">3</span>İçerik</div></div>`;
+  if(w.step===1){
+    const opts=[['Manuel','Manuel giriş','Bir ekip değerleri ekrandan girer; dilerse Excel ile toplu yükler. Her ay freeze dışı dönemler güncellenir.','Örnek: satış tahmini, planlama tahmini. Sonraki adım: tanım formu, ardından boş giriş tablosu'],['Yüklenen','Dosyadan yükleme','Değerler dışarıda hazırlanır, Excel veya tablo bağlantısıyla gelir. Ekrandan hücre düzenlenmez, yeniden yüklenir.','Örnek: bütçe, yönetim hedefi. Sonraki adım: tanım formu, ardından şablon ve kolon eşleştirme'],['Türetilmiş','Diğer tahminlerden türet','Var olan tahminler kuralla birleştirilir: öncelik zinciri, ağırlıklı ortalama, formül. Kural kaydedilince kilitlenir.','Örnek: konsensüs. Sonraki adım: konsensüs tanımı ekranı'],['Model','Model çalıştır','Kayıtlı bir Python modeli seçilen sürücü seti ile çalışır. Değerler elle değişmez; yeniden çalıştırılır.','Örnek: ML talep tahmini. Sonraki adım: model seçimi, sürücü seti, zamanlama (yönetici yetkisi)']];
+    return mh('Yeni tahmin')+`<div class="mb">${steps}<div class="hint">Bu tahmin nasıl üretilecek? Seçim sonraki adımları belirler. Tip sonradan değiştirilemez.</div><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">${opts.map(o=>`<label class="opt ${w.type===o[0]?'on':''}"><input type="radio" name="tip" data-act="wiz-type" data-v="${o[0]}" ${w.type===o[0]?'checked':''}><div><div style="font-size:14px;font-weight:600">${o[1]} <span class="pill ${typePill(o[0])}">${o[0]}</span></div><div style="margin-top:4px">${o[2]}</div><div class="hint" style="margin-top:6px">${o[3]}</div></div></label>`).join('')}</div><div class="hint">Senaryo buradan açılmaz; Tahminler ekranındaki "Yeni senaryo" ile kurulur ve istenirse sonradan tahmine taşınır.</div></div><div class="mf"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" data-act="wiz-next">Devam: Tanım</button></div>`;
+  }
+  if(w.step===2){
+    const common=`<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px"><div class="fld"><label class="lbl" for="wn">Ad</label><input id="wn" class="sel" value="${esc(w.name)}" data-act="wiz-field" data-k="name"></div><div class="fld"><label class="lbl" for="wc">Grafik rengi</label><select id="wc" class="sel" data-act="wiz-field" data-k="color"><option value="#7c3aed">Mor</option><option value="#d97706">Turuncu</option><option value="#0891b2">Camgöbeği</option><option value="#db2777">Pembe</option></select></div></div><div class="fld"><label class="lbl" for="wd">Açıklama</label><input id="wd" class="sel" value="${esc(w.desc)}" data-act="wiz-field" data-k="desc"></div>`;
+    const where=`<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px"><div class="fld"><label class="lbl" for="wl">Seviye</label><select id="wl" class="sel" data-act="wiz-field" data-k="level"><option>Bölge</option><option>SKU</option><option>Ürün grubu</option><option>Mağaza</option></select><div class="hint">Alt seviyelere geçmiş paya göre dağıtılır</div></div><div class="fld"><label class="lbl" for="wg">Dönem</label><select id="wg" class="sel" data-act="wiz-field" data-k="grain"><option>Aylık</option><option>Haftalık</option></select><div class="hint">Girişin yapıldığı zaman dilimi</div></div><div class="fld"><label class="lbl" for="wm">Ölçü</label><select id="wm" class="sel"><option>Adet</option><option>Ciro</option><option>Adet ve ciro</option></select></div></div>
+      <div class="fld"><span class="lbl">Kapsam</span><button class="btn" data-act="scope-open" data-target="wizard" style="text-align:left;align-self:flex-start">${esc(w.scopeLabel||'Marmara, Ege, İç Anadolu +1, 12 alt üye')} ▾</button><div class="hint">Kullanıcılar bu kapsam içinde kendi satır yetkileriyle girer</div></div>`;
+    let specific='';
+    if(w.type==='Manuel') specific=`<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px"><div class="fld"><label class="lbl" for="wo">Sahip ekip</label><select id="wo" class="sel" data-act="wiz-field" data-k="owner"><option>Satış</option><option>Planlama</option><option>Pazarlama</option><option>Finans</option></select><div class="hint">Bu ekip kendi satır yetkisi içinde girer</div></div><div class="fld"><label class="lbl" for="wb">Boş hücre</label><select id="wb" class="sel"><option>Referansı kabul et (ML talep tahmini)</option><option>Boş say, konsensüste sonraki adıma geç</option><option>Sıfır</option></select></div><div class="fld"><label class="lbl" for="wt">Gerekçe eşiği</label><div class="row"><input id="wt" type="text" class="sel" style="width:90px" value="${w.threshold}" data-act="wiz-field" data-k="threshold"><span class="hint">% ve üzeri sapmada gerekçe kodu istenir</span></div></div><div class="fld"><label class="lbl" for="wr">Grid de referans</label><select id="wr" class="sel"><option>ML talep tahmini</option><option>Geçen yıl</option><option>Yok</option></select></div></div><label class="chk"><input type="checkbox" checked data-act="wiz-field" data-k="cockpit">Kokpitte göster</label>`;
+    else if(w.type==='Yüklenen') specific=`<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px"><div class="fld"><label class="lbl" for="ws">Kaynak</label><select id="ws" class="sel"><option>Excel dosyası</option><option>Tablo bağlantısı (MS SQL)</option><option>Tablo bağlantısı (BigQuery)</option></select></div><div class="fld"><label class="lbl" for="wo">Yükleyen ekip</label><select id="wo" class="sel" data-act="wiz-field" data-k="owner"><option>Finans</option><option>Planlama</option></select></div></div><label class="chk"><input type="checkbox" checked data-act="wiz-field" data-k="cockpit">Kokpitte göster</label>`;
+    else if(w.type==='Model') specific=`<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px"><div class="fld"><label class="lbl" for="wp">Model paketi</label><select id="wp" class="sel"><option>pharma_scurve_v2</option><option>seasonal_naive</option><option>driver_regression</option></select></div><div class="fld"><label class="lbl" for="wds">Sürücü seti</label><select id="wds" class="sel"><option>Baz (OVP 2027)</option><option>Yüksek enflasyon</option></select></div><div class="fld"><label class="lbl" for="wz">Zamanlama</label><select id="wz" class="sel"><option>Her gün 06:00</option><option>Haftalık</option><option>Elle</option></select></div></div><div class="hint">Model tipi yönetici yetkisi ister; bu prototipte izin verildi.</div>`;
+    return mh('Yeni tahmin: '+w.type)+`<div class="mb">${steps}${common}${specific}${w.type!=='Model'?where:''}</div><div class="mf"><button class="btn" data-act="wiz-back">Geri</button><button class="btn pri" data-act="wiz-next">${w.type==='Manuel'?'Kaydet ve girişe geç':w.type==='Yüklenen'?'Devam: Dosya':'Kaydet'}</button></div>`;
+  }
+  // step 3: upload
+  return mh('Yeni tahmin: '+esc(w.name)+', dosya')+`<div class="mb">${steps}
+    <div class="row"><button class="btn" data-act="toast" data-m="Şablon indirildi: satırlar ${esc(w.level)}, sütunlar Oca 27 ile Mar 28">Şablonu indir</button><span class="hint">Şablon, tanımdaki seviye ve ufka göre üretilir</span></div>
+    <div style="border:1px dashed var(--line);border-radius:8px;padding:14px;background:var(--soft)" class="row"><div class="grow"><div style="font-weight:600">${w.file?'butce_2027_v3.xlsx':'Dosya seçilmedi'}</div><div class="hint">${w.file?'184 KB, 2 sayfa, "Adet" sayfası okunuyor':'xlsx veya csv'}</div></div><button class="btn" data-act="wiz-file">${w.file?'Başka dosya seç':'Dosya seç'}</button></div>
+    ${w.file?`<h2>Kolon eşleştirme</h2><table class="tbl"><thead><tr><th>Dosyadaki kolon</th><th>Örnek</th><th>Platform alanı</th><th>Durum</th></tr></thead><tbody><tr><td>Urun_Grubu</td><td>ONKOLOJI</td><td><select class="sel"><option>Ürün grubu (kod)</option><option>Yok say</option></select></td><td class="good">14/14 eşleşti</td></tr><tr><td>Bolge</td><td>MARMARA</td><td><select class="sel"><option>Bölge (kod)</option><option>Yok say</option></select></td><td class="amber">1 eşleşmeyen: GUNEYDOGU</td></tr><tr><td>2027-01 … 2028-03</td><td>12.400</td><td><select class="sel"><option>Dönem sütunları (ay)</option></select></td><td class="good">15 dönem</td></tr></tbody></table>
+    <h2>Doğrulama</h2><table class="tbl"><tbody><tr><td>Satır sayısı</td><td class="num">56 satır, 840 hücre</td><td></td></tr><tr><td>Eşleşmeyen üye</td><td class="amber">1 satır</td><td><select class="sel"><option>Satırı atla</option><option>"Doğu ve Güneydoğu" ile eşle</option><option>Yüklemeyi durdur</option></select></td></tr><tr><td>Boş hücre</td><td class="amber">12 hücre</td><td><select class="sel"><option>Boş bırak</option><option>Sıfır yaz</option></select></td></tr><tr><td>Freeze veya geçmiş dönemine değer</td><td class="good">Yok</td><td></td></tr><tr><td>Toplam, 15 dönem</td><td class="num">9,84 mn adet</td><td class="hint">ML toplamından %6,2 yüksek</td></tr></tbody></table>`:''}
+    </div><div class="mf"><button class="btn" data-act="wiz-back">Geri</button><button class="btn pri" data-act="wiz-finish" ${w.file?'':'disabled'}>Yükle ve kaydet</button></div>`;
+}
+
+function reasonModal(fid,r,c){ const e=state.entry[fid]; const row=e.rows[r]; const v=row.val[c], ml=row.ml[c], cur=row.reason[c]||{};
+  return mh('Gerekçe: '+esc(row.name)+', '+FUT[c])+`<div class="mb"><div class="hint">Girilen ${fmt(v)}, referans ${fmt(ml)}, fark ${fmtP(pct(v,ml))}. Referanstan %${fc(fid).reasonThreshold||10} ve üzeri sapmada gerekçe zorunlu.</div>
+    <div class="fld"><label class="lbl" for="gk">Gerekçe kodu</label><select id="gk" class="sel">${REASONS.map(x=>`<option ${cur.code===x?'selected':''}>${x}</option>`).join('')}</select></div>
+    <div class="fld"><label class="lbl" for="gn">Not</label><textarea id="gn" class="sel" rows="3">${esc(cur.note||'')}</textarea><div class="hint">İhale, Lansman ve Rakip hareketi kodlarında not zorunlu</div></div></div>
+    <div class="mf"><button class="btn" data-act="reason-cancel" data-id="${fid}" data-r="${r}" data-c="${c}">Vazgeç, değeri geri al</button><button class="btn pri" data-act="reason-ok" data-id="${fid}" data-r="${r}" data-c="${c}">Kaydet</button></div>`; }
+
+function moveModal(ids){ const names=ids.map(id=>sc(id).name);
+  return mh(ids.length>1?'Senaryoları tahmine taşı':'Senaryoyu tahmine taşı')+`<div class="mb"><div>${names.map(n=>'<strong>'+esc(n)+'</strong>').join(', ')} tahmin listesine "Senaryodan" tipinde eklenir; kokpitte, karşılaştırmada ve doğrulukta diğer tahminler gibi görünür, konsensüs kuralına girdi olabilir. Senaryo tanımı alt listede kalır.</div>
+    ${ids.length===1?`<div class="fld"><label class="lbl" for="mn">Tahmin adı</label><input id="mn" class="sel" value="${esc(names[0])}"></div>`:''}
+    <div class="fld"><span class="lbl">Durum</span><label class="chk"><input type="radio" name="md" value="Canlı" checked>Canlı: baz tahmin yenilendikçe bu da yenilenir</label><label class="chk"><input type="radio" name="md" value="Dondurulmuş">Dondurulmuş: bugünkü değerler sabit kalır</label></div>
+    <label class="chk"><input type="checkbox" id="mc" checked>Kokpitte göster</label></div><div class="mf"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" data-act="move-ok" data-ids="${ids.join(',')}">Taşı</button></div>`; }
+
+function bulkModal(fid,kind){ return mh(kind==='pct'?'Yüzde uygula':'Toplam gir ve dağıt')+`<div class="mb">
+  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px"><div class="fld"><label class="lbl" for="b1">Başlangıç</label><select id="b1" class="sel">${FUT.map((m,i)=>`<option value="${i}" ${i===2?'selected':''}>${m}</option>`).join('')}</select></div><div class="fld"><label class="lbl" for="b2">Bitiş</label><select id="b2" class="sel">${FUT.map((m,i)=>`<option value="${i}" ${i===5?'selected':''}>${m}</option>`).join('')}</select></div></div>
+  <div class="fld"><label class="lbl" for="bs">Satırlar</label><select id="bs" class="sel"><option value="all">Tüm bölgeler</option>${REGIONS.map((r,i)=>`<option value="${i}">${r}</option>`).join('')}</select></div>
+  ${kind==='pct'?`<div class="fld"><label class="lbl" for="bv">Referansın (ML) yüzde kaçı üstü veya altı</label><div class="row"><input id="bv" class="sel" style="width:110px" value="5"><span class="hint">Örnek: 5 yazınca ML x 1,05; -8 yazınca ML x 0,92</span></div></div>`
+  :`<div class="fld"><label class="lbl" for="bv">Dönem başına toplam (adet)</label><div class="row"><input id="bv" class="sel" style="width:140px" value="40.000"><span class="hint">Bölgelere geçmiş paya göre dağıtılır</span></div></div>`}
+  <div class="hint">Eşiği aşan hücrelerde gerekçe tek seferde sorulur.</div></div><div class="mf"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" data-act="bulk-ok" data-id="${fid}" data-kind="${kind}">Uygula</button></div>`; }
+
+function scopeModal(target){
+  const d=state.scopeDraft; const info=scopeInfo(d.dim,d.sel);
+  const q=(d.q||'').toLowerCase();
+  const node=(n,depth)=>{ const on=d.sel.includes(n.id); const covered=!on&&d.sel.some(id=>{ const p=findNode(id,TREE[d.dim].nodes); return p&&p!==n&&allIds(p).includes(n.id); });
+    const match=!q||n.name.toLowerCase().includes(q)||(n.children||[]).some(c=>allIds(c).some(id=>findNode(id,TREE[d.dim].nodes).name.toLowerCase().includes(q)));
+    if(!match) return '';
+    return `<label class="chk" style="padding:6px 0 6px ${depth*22}px;${covered?'color:var(--mute)':''}"><input type="checkbox" data-act="scope-toggle" data-id="${n.id}" ${on||covered?'checked':''} ${covered?'disabled':''}>${esc(n.name)}${n.children?`<span class="hint">(${allIds(n).length-1})</span>`:''}</label>${(n.children||[]).map(c=>node(c,depth+1)).join('')}`; };
+  return mh('Kapsam seç')+`<div class="mb">
+    <div class="row"><div class="seg">${Object.keys(TREE).map(k=>`<button data-act="scope-dim" data-v="${k}" class="${d.dim===k?'on':''}">${TREE[k].name}</button>`).join('')}</div><input type="search" class="sel" style="width:220px" placeholder="Ara" value="${esc(d.q||'')}" data-act="scope-q" aria-label="Ara"><div class="grow"></div><span class="hint">Seçili: ${esc(info.label)}, ${info.count} alt üye, payı %${Math.round(info.factor*100)}</span></div>
+    <div class="row" style="gap:8px"><span class="lbl">Kayıtlı gruplar</span>${GROUPS.filter(g=>g.dim===d.dim).map((g,i)=>`<button class="btn sm" data-act="scope-group" data-i="${GROUPS.indexOf(g)}">${esc(g.name)}</button>`).join('')||'<span class="hint">yok</span>'}<button class="btn sm" data-act="toast" data-m="Seçim grup olarak kaydedildi; herkesle paylaşılabilir">Seçimi grup olarak kaydet</button></div>
+    <div class="panel pad" style="max-height:360px;overflow:auto">${TREE[d.dim].nodes.map(n=>node(n,0)).join('')}</div>
+    <div class="hint">Üst düğüm seçilince altındakiler kapsanır. Ağaçta olmayan üye kümeleri için grup kaydedilir; grup seviye gibi davranır.</div></div>
+    <div class="mf"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" data-act="scope-ok" data-target="${target}">Uygula</button></div>`;
+}
+function runModal(title,lines,onDone){ openModal(mh(title)+`<div class="mb"><div class="prog"><div id="pg"></div></div><div id="pl" class="hint">${lines[0]}</div></div>`); let i=0; const bar=document.getElementById('pg'); const tick=()=>{ i++; if(bar) bar.style.width=Math.min(100,i*100/lines.length)+'%'; const pl=document.getElementById('pl'); if(pl&&lines[i]) pl.textContent=lines[i]; if(i<lines.length) setTimeout(tick,550); else setTimeout(()=>{closeModal(); onDone();},300); }; setTimeout(tick,500); }
+function confirmModal(title,text,act,data,btn){ openModal(mh(title)+`<div class="mb"><div>${text}</div></div><div class="mf"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" data-act="${act}" ${data}>${btn||'Onayla'}</button></div>`); }
+
+/* ---------- actions ---------- */
+document.addEventListener('click',e=>{
+  const el=e.target.closest('[data-act]'); if(!el) return;
+  const act=el.dataset.act, id=el.dataset.id, r=route();
+  if(el.tagName==='INPUT'&&['cell','drv-cell','cons-field','wiz-field','scen-desc','weight','drv-const','drv-pct'].includes(act)) return;
+  switch(act){
+    case 'close': closeModal(); break;
+    case 'close-bd': if(e.target===el) closeModal(); break;
+    case 'toast': toast(el.dataset.m); break;
+    case 'scope-open': { const t=el.dataset.target; let src=state.scope; if(t.startsWith('scenario:')){ const s=sc(t.split(':')[1]); src=s.scopeObj||{dim:'geo',sel:['tr']}; } else if(t==='wizard'){ src=state.wizard.scopeObj||{dim:'geo',sel:['mar','ege','ic','akd']}; } else if(t==='rule'){ src=state.ruleScope||{dim:'geo',sel:['tr']}; } state.scopeDraft={dim:src.dim,sel:src.sel.slice(),q:''}; openModal(scopeModal(t),true); break; }
+    case 'scope-dim': state.scopeDraft.dim=el.dataset.v; state.scopeDraft.sel=[]; openModal(scopeModal(document.querySelector('[data-act=scope-ok]').dataset.target),true); break;
+    case 'scope-toggle': { const d=state.scopeDraft; const n=findNode(id,TREE[d.dim].nodes); const desc=allIds(n).slice(1); if(el.checked){ d.sel=d.sel.filter(x=>!desc.includes(x)); d.sel.push(id); } else d.sel=d.sel.filter(x=>x!==id); openModal(scopeModal(document.querySelector('[data-act=scope-ok]').dataset.target),true); break; }
+    case 'scope-group': { const g=GROUPS[Number(el.dataset.i)]; state.scopeDraft.dim=g.dim; state.scopeDraft.sel=g.sel.slice(); openModal(scopeModal(document.querySelector('[data-act=scope-ok]').dataset.target),true); break; }
+    case 'scope-ok': { const d=state.scopeDraft; const info=scopeInfo(d.dim,d.sel); const t=el.dataset.target; const obj={dim:d.dim,sel:d.sel.slice(),label:info.label,factor:info.factor};
+      if(t==='cockpit'){ state.scope=obj; } else if(t.startsWith('scenario:')){ const s=sc(t.split(':')[1]); s.scope=info.label; s.scopeObj=obj; } else if(t==='wizard'){ state.wizard.scopeObj=obj; state.wizard.scopeLabel=info.label+', '+info.count+' alt üye'; } else if(t==='rule'){ state.ruleScope=obj; }
+      closeModal(); if(t==='wizard') openModal(wizardHtml(),true); else render(); break; }
+    case 'snap-current': e.preventDefault(); state.snap='current'; render(); break;
+    case 'alert-close': { const a=state.alerts.find(x=>x.id===id); a.status='closed'; toast('Uyarı kapatıldı, audit e yazıldı'); render(); break; }
+    case 'toggle-theme': { const root=document.documentElement; const cur=root.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'); root.dataset.theme = cur==='dark'?'light':'dark'; break; }
+    case 'seg': state[el.dataset.key]=el.dataset.v; render(); break;
+    case 'cockpit-sel': { const i=state.cockpitSel.indexOf(id); if(el.checked&&i<0) state.cockpitSel.push(id); if(!el.checked&&i>=0) state.cockpitSel.splice(i,1); if(r.page==='kokpit') render(); break; }
+    case 'scen-sel': case 'cmp-sel': { const i=state.compareSel.indexOf(id); if(el.checked&&i<0) state.compareSel.push(id); if(!el.checked&&i>=0) state.compareSel.splice(i,1); if(r.page==='karsilastir') render(); break; }
+    case 'run-model': runModal('ML talep tahmini çalışıyor',['Veri çekiliyor: 1.240 seri, 36 ay','Sürücü seti birleştiriliyor: Baz (OVP 2027)','Model çalışıyor','Uzlaştırma: SKU dan bölgeye','Tamamlandı'],()=>{ fc(id).updated=now()+', elle'; toast('ML talep tahmini güncellendi, 41 sn'); render(); }); break;
+    case 'show-rule': { const f=fc(id); openModal(mh(f.name+': kural')+`<div class="mb"><div class="warnbox">Bu kural kilitli. Değişiklik için yeni konsensüs tanımı açılır.</div><div class="kv"><span>Tip</span><span>${f.rule.kind}</span></div>${f.rule.chain.map((c,i)=>`<div class="step"><div class="rn">${i+1}</div><div>${esc(c)}</div></div>`).join('')}${f.rule.exceptions.length?`<div class="lbl">İstisnalar</div>${f.rule.exceptions.map(x=>`<div>${esc(x)}</div>`).join('')}`:''}<div class="kv"><span>Durum</span><span class="${f.status==='Canlı'?'st-live':'st-frz'}">${f.status}</span></div></div><div class="mf"><button class="btn" data-act="close">Kapat</button><a class="btn pri" href="#/konsensus" data-act="close" style="display:inline-block">Yeni tanım aç</a></div>`); break; }
+    case 'reupload': state.wizard={step:3,type:'Yüklenen',name:fc(id).name,desc:'',level:'Ürün grubu',owner:'Finans',color:'#6b7280',cockpit:true,threshold:10,file:false,reupload:id}; openModal(wizardHtml(),true); break;
+    case 'freeze': confirmModal('Dondur',`<strong>${esc(fc(id).name)}</strong> bugünkü değerlerinde sabitlenir; baz tahmin yenilense de değişmez. Bu işlem geri alınmaz; tekrar canlısı istenirse senaryo yeniden taşınır.`,'freeze-ok',`data-id="${id}"`,'Dondur'); break;
+    case 'freeze-ok': fc(id).status='Dondurulmuş'; fc(id).updated=now()+' da donduruldu'; closeModal(); toast(fc(id).name+' donduruldu'); render(); break;
+    case 'detail': { const f=fc(id); openModal(mh(f.name)+`<div class="mb"><div class="kv"><span>Tip</span><span class="pill p-sen">Senaryodan</span></div><div class="kv"><span>Kaynak senaryo</span><span>${esc(f.from||'')}</span></div><div class="kv"><span>Durum</span><span>${f.status}</span></div><div class="kv"><span>Güncelleme</span><span>${esc(f.updated)}</span></div></div><div class="mf"><button class="btn" data-act="close">Kapat</button></div>`); break; }
+    case 'wizard': state.wizard={step:1,type:'Manuel',name:'',desc:'',level:'Bölge',owner:'Satış',color:'#7c3aed',cockpit:true,threshold:10,file:false,grain:'Aylık'}; openModal(wizardHtml(),true); break;
+    case 'wiz-type': state.wizard.type=el.dataset.v; openModal(wizardHtml(),true); break;
+    case 'wiz-back': state.wizard.step--; openModal(wizardHtml(),true); break;
+    case 'wiz-file': state.wizard.file=true; openModal(wizardHtml(),true); break;
+    case 'wiz-next': { const w=state.wizard;
+      if(w.step===1){ if(w.type==='Türetilmiş'){ closeModal(); go('#/konsensus'); break; } w.step=2; if(!w.name) w.name = w.type==='Manuel'?'Pazarlama tahmini':w.type==='Yüklenen'?'Bütçe 2027 revize':'Yeni model tahmini'; openModal(wizardHtml(),true); break; }
+      if(w.step===2){ if(!w.name.trim()){ toast('Ad boş olamaz'); break; }
+        if(w.type==='Manuel'){ const nid='m'+Date.now(); state.forecasts.splice(3,0,{id:nid,name:w.name,type:'Manuel',owner:w.owner+' ekibi',level:w.level,grain:w.grain,updated:now()+', '+state.user.name+' (tanım)',fill:0,mape:0,status:'Canlı',cockpit:w.cockpit,color:w.color,values:ML.map(()=>null),reasonThreshold:Number(w.threshold)||10}); if(w.cockpit) state.cockpitSel.push(nid); closeModal(); toast(w.name+' oluşturuldu, içerik girişi açıldı'); go('#/giris/'+nid); break; }
+        if(w.type==='Yüklenen'){ w.step=3; openModal(wizardHtml(),true); break; }
+        state.forecasts.unshift({id:'mo'+Date.now(),name:w.name,type:'Model',owner:'Sistem',level:'SKU',updated:'Henüz çalıştırılmadı',fill:0,mape:0,status:'Canlı',cockpit:true,color:w.color,values:ML.map(()=>null)}); closeModal(); toast(w.name+' kaydedildi; ilk çalıştırma listeden'); render(); break; }
+      break; }
+    case 'wiz-finish': { const w=state.wizard; if(w.reupload){ const f=fc(w.reupload); f.updated=now()+', dosya'; closeModal(); toast(f.name+' yeniden yüklendi, önceki yükleme versiyon olarak saklandı'); render(); break; }
+      const nid='u'+Date.now(); state.forecasts.push({id:nid,name:w.name,type:'Yüklenen',owner:w.owner,level:w.level,grain:w.grain,updated:now()+', dosya',fill:98,mape:0,status:'Dondurulmuş',cockpit:w.cockpit,color:w.color,values:BUD.map((v,i)=>i<13?null:Math.round(v*0.98))}); if(w.cockpit) state.cockpitSel.push(nid); closeModal(); toast(w.name+' yüklendi ve tahmin listesine eklendi'); go('#/tahminler'); break; }
+    case 'new-scenario': openModal(mh('Yeni senaryo')+`<div class="mb"><div class="fld"><label class="lbl" for="nn">Ad</label><input id="nn" class="sel" value="Yeni senaryo"></div><div class="fld"><label class="lbl" for="nb">Baz tahmin</label><select id="nb" class="sel">${state.forecasts.filter(f=>f.status!=='Arşiv').map(f=>`<option value="${f.id}">${esc(f.name)} (${f.type})</option>`).join('')}</select><div class="hint">Baz model ise sürücüler açılır; değilse yalnızca çıktı kuralları</div></div></div><div class="mf"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" data-act="new-scenario-ok">Oluştur ve aç</button></div>`); break;
+    case 'new-scenario-ok': { const nid='s'+Date.now(); const name=document.getElementById('nn').value||'Yeni senaryo'; const base=document.getElementById('nb').value; state.scenarios.push({id:nid,name,base,scope:'Tüm kapsam',start:0,desc:'',tufe:TUFE_BASE.slice(),method:'Sabit',rules:[],lastRun:null,driversDirty:true,moved:false}); closeModal(); go('#/senaryo/'+nid); break; }
+    case 'del-scen': confirmModal('Senaryoyu sil',`<strong>${esc(sc(id).name)}</strong> silinecek.${sc(id).moved?' Tahmin listesine taşınmış kopyası silinmez.':''} Senaryolar kendiliğinden silinmez; bu işlem sadece sizin kararınız.`,'del-scen-ok',`data-id="${id}"`,'Sil'); break;
+    case 'del-scen-ok': state.scenarios=state.scenarios.filter(s=>s.id!==id); state.compareSel=state.compareSel.filter(x=>x!==id); closeModal(); toast('Senaryo silindi'); go('#/tahminler'); break;
+    case 'move-one': openModal(moveModal([id])); break;
+    case 'move-selected': { const ids=state.compareSel.filter(x=>sc(x)); if(!ids.length){ toast('Önce senaryo seç'); break; } openModal(moveModal(ids)); break; }
+    case 'move-ok': { const ids=el.dataset.ids.split(','); const mode=document.querySelector('input[name=md]:checked').value; const ck=document.getElementById('mc').checked; ids.forEach(sid=>{ const s=sc(sid); const name=ids.length===1?(document.getElementById('mn').value||s.name):s.name; const nid='f'+Date.now()+sid; const res=scenarioSeries(s); state.forecasts.push({id:nid,name,type:'Senaryodan',owner:state.user.name,level:fc(s.base).level,updated:'Baz: '+fc(s.base).name+', '+(s.rules.length?s.rules.length+' kural':'kural yok')+(mode==='Dondurulmuş'?', '+now()+' da donduruldu':''),fill:100,mape:0,status:mode,cockpit:ck,color:'#d97706',from:s.name,values:ML.map((v,i)=>i<15?null:res.out[i-15])}); if(ck) state.cockpitSel.push(nid); s.moved=true; }); closeModal(); toast(ids.length>1?'Senaryolar tahmin listesine taşındı':'Senaryo tahmin listesine taşındı'); go('#/tahminler'); break; }
+    case 'save-scen': sc(id).saved=true; toast('Senaryo kaydedildi'); break;
+    case 'run-scen': { const s=sc(id); const isModel=fc(s.base).type==='Model'; runModal(s.name+' çalışıyor', isModel?['Sürücü seti hazırlanıyor','Model çalışıyor: 1.240 seri','Kurallar uygulanıyor','Uzlaştırma','Tamamlandı']:['Kurallar uygulanıyor','Uzlaştırma','Tamamlandı'],()=>{ s.lastRun=now(); s.driversDirty=false; toast('Çalıştırma tamamlandı; önizleme güncellendi'); render(); }); break; }
+    case 'drv': state.driverSel=el.dataset.k; render(); break;
+    case 'drv-method': sc(id).method=el.dataset.v; render(); break;
+    case 'rule-add': { const s=sc(id); const g=x=>document.getElementById(x); const type=g('rt').value; const param=parseNum(g('rp').value); if(param==null){ toast('Parametre sayı olmalı'); break; } const reason=g('rg').value; const note=g('rn').value; if(['İhale','Lansman','Rakip hareketi'].includes(reason)&&!note.trim()){ toast(reason+' kodunda not zorunlu'); g('rn').focus(); break; } s.rules.push({type,scope:g('rk').dataset.v,start:Number(g('rb').value),end:Number(g('re').value),param,reason,note}); toast('Kural eklendi'); render(); break; }
+    case 'rule-del': sc(id).rules.splice(Number(el.dataset.i),1); render(); break;
+    case 'rule-up': { const i=Number(el.dataset.i); if(i>0){ const a=sc(id).rules; [a[i-1],a[i]]=[a[i],a[i-1]]; render(); } break; }
+    case 'cons-kind': state.consDraft.kind=el.dataset.v; render(); break;
+    case 'chain-add': { const d=state.consDraft; const free=state.forecasts.find(f=>f.type!=='Türetilmiş'&&f.status!=='Arşiv'&&!d.chain.includes(f.id)); d.chain.push(free?free.id:'ml'); render(); break; }
+    case 'chain-del': state.consDraft.chain.splice(Number(el.dataset.i),1); render(); break;
+    case 'exc-add': openModal(mh('İstisna ekle')+`<div class="mb"><div class="fld"><label class="lbl" for="xc">Koşul</label><select id="xc" class="sel"><option>ABC sınıfı = C</option><option>Kapsam = Yeni ürünler grubu</option><option>Ufuk 4. ay ve sonrası</option><option>Kanal = İhale</option></select></div><div class="fld"><label class="lbl" for="xr">Kural</label><select id="xr" class="sel"><option>Doğrudan: ML talep tahmini</option><option>Doğrudan: Satış tahmini</option><option>Doğrudan: Planlama tahmini</option><option>Ağırlıklı: ML 0,6, Planlama 0,4</option></select></div></div><div class="mf"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" data-act="exc-ok">Ekle</button></div>`); break;
+    case 'exc-ok': state.consDraft.exceptions.push({cond:document.getElementById('xc').value,rule:document.getElementById('xr').value}); closeModal(); render(); break;
+    case 'exc-del': state.consDraft.exceptions.splice(Number(el.dataset.i),1); render(); break;
+    case 'cons-save': { const d=state.consDraft; confirmModal('Kaydet ve kilitle',`<strong>${esc(d.name)}</strong> kaydedilecek ve kural kilitlenecek. Konsensüs v2 arşive gider, kokpitte v3 onun yerine geçer. Bundan sonra değişiklik yeni tanım gerektirir.`,'cons-save-ok','','Kaydet ve kilitle'); break; }
+    case 'cons-save-ok': { const d=state.consDraft; const old=state.forecasts.find(f=>f.type==='Türetilmiş'&&f.status==='Canlı'); if(old){ old.status='Arşiv'; old.updated=old.updated+', '+now()+' da kapatıldı'; state.cockpitSel=state.cockpitSel.filter(x=>x!==old.id); } const nid='c'+Date.now(); const idx=state.forecasts.findIndex(f=>f.type==='Türetilmiş'); state.forecasts.splice(idx<0?3:idx,0,{id:nid,name:d.name,type:'Türetilmiş',owner:'Planlama',level:'SKU',updated:'Kural: '+(d.kind==='Öncelik zinciri'?d.chain.map(c=>fc(c).name.replace(' tahmini','').toLowerCase()).join(', yoksa '):d.kind.toLowerCase()),fill:100,mape:3.1,status:'Canlı',cockpit:true,color:'#111827',values:ML.map((v,i)=>i<13?null:Math.round(v*1.005)),rule:{kind:d.kind,chain:d.chain.map(c=>fc(c).name),exceptions:d.exceptions.map(x=>x.cond+': '+x.rule)}}); state.cockpitSel.push(nid); state.consDraft=null; closeModal(); toast(d.name+' kaydedildi ve kilitlendi'); go('#/tahminler'); break; }
+    case 'excel-dl': toast('Excel indirildi: Marmara, 5 bölge x 15 dönem, kilitli hücreler korumalı'); break;
+    case 'excel-ul': openModal(mh('Excel yükle')+`<div class="mb"><div style="border:1px dashed var(--line);border-radius:8px;padding:14px;background:var(--soft)" class="row"><div class="grow"><div style="font-weight:600">satis_tahmini_marmara.xlsx</div><div class="hint">Şablondan, 5 satır x 15 dönem</div></div></div><h2>Fark listesi</h2><table class="tbl"><thead><tr><th>Hücre</th><th class="num">Ekranda</th><th class="num">Dosyada</th><th class="num">Fark</th></tr></thead><tbody><tr><td>Bursa, Oca 27</td><td class="num mute">boş</td><td class="num">7.300</td><td class="num good">yeni</td></tr><tr><td>Bursa, Şub 27</td><td class="num mute">boş</td><td class="num">7.150</td><td class="num good">yeni</td></tr><tr><td>Kocaeli, Mar 27</td><td class="num">5.800</td><td class="num">6.400</td><td class="num amber">+%10,3, gerekçe istenecek</td></tr><tr><td>İstanbul Avrupa, Kas 26</td><td class="num mute">freeze</td><td class="num">13.300</td><td class="num bad">atlandı</td></tr></tbody></table><div class="hint">Yalnızca düzenlenebilir hücreler okunur; freeze ve geçmiş atlanır.</div></div><div class="mf"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" data-act="excel-ul-ok" data-id="${r.id}">3 değişikliği uygula</button></div>`); break;
+    case 'excel-ul-ok': { const e=initEntry(id); e.rows[2].val[0]=7300; e.rows[2].val[1]=7150; e.rows[3].val[2]=6400; state.unsaved+=3; closeModal(); render(); state.selCell={r:3,c:2}; openModal(reasonModal(id,3,2)); break; }
+    case 'copy-ref': { const e=initEntry(id); let n=0; e.rows.forEach(row=>row.val.forEach((v,i)=>{ if(v==null){ row.val[i]=row.ml[i]; n++; } })); state.unsaved+=n; toast(n+' boş hücre referansla dolduruldu'); render(); break; }
+    case 'save-entry': { const e=initEntry(id); const f=fc(id); const total=e.rows.length*15, filled=e.rows.reduce((a,row)=>a+row.val.filter(v=>v!=null).length,0); f.fill=Math.round(filled/total*100); f.updated=now()+', '+state.user.name; const vals=FUT.map((m,i)=>e.rows.reduce((a,row)=>a+(row.val[i]??row.ml[i]),0)); f.values=ML.map((v,i)=>i<15?null:vals[i-15]); state.unsaved=0; toast('Kaydedildi; konsensüs ve kokpit güncel değeri okuyor'); render(); break; }
+    case 'bulk': openModal(bulkModal(id,el.dataset.kind)); break;
+    case 'bulk-ok': { const e=initEntry(id); const g=x=>document.getElementById(x); const a=Number(g('b1').value), b=Number(g('b2').value), rs=g('bs').value, v=parseNum(g('bv').value); if(v==null||a>b){ toast('Aralık veya değer hatalı'); break; } const rows=rs==='all'?e.rows.map((_,i)=>i):[Number(rs)]; let n=0, big=0; rows.forEach(ri=>{ const row=e.rows[ri]; for(let c=a;c<=b;c++){ row.val[c]= el.dataset.kind==='pct'? Math.round(row.ml[c]*(1+v/100)) : Math.round(v*SHARE[ri]); n++; if(Math.abs(pct(row.val[c],row.ml[c]))>=(fc(id).reasonThreshold||10)) big++; } }); state.unsaved+=n; closeModal(); render(); if(big){ openModal(mh('Toplu gerekçe')+`<div class="mb"><div class="hint">${big} hücre referanstan eşik üstü sapıyor. Tek gerekçe hepsine yazılır.</div><div class="fld"><label class="lbl" for="gk">Gerekçe kodu</label><select id="gk" class="sel">${REASONS.map(x=>`<option>${x}</option>`).join('')}</select></div><div class="fld"><label class="lbl" for="gn">Not</label><textarea id="gn" class="sel" rows="2"></textarea></div></div><div class="mf"><button class="btn pri" data-act="bulk-reason-ok" data-id="${id}" data-a="${a}" data-b="${b}" data-rows="${rows.join(',')}">Kaydet</button></div>`); } else toast(n+' hücre güncellendi'); break; }
+    case 'bulk-reason-ok': { const e=initEntry(id); const code=document.getElementById('gk').value, note=document.getElementById('gn').value; el.dataset.rows.split(',').forEach(ri=>{ const row=e.rows[Number(ri)]; for(let c=Number(el.dataset.a);c<=Number(el.dataset.b);c++){ if(Math.abs(pct(row.val[c],row.ml[c]))>=(fc(id).reasonThreshold||10)) row.reason[c]={code,note,by:state.user.name,at:now(),prev:row.ml[c]}; } }); closeModal(); toast('Toplu değişiklik ve gerekçe kaydedildi'); render(); break; }
+    case 'reason': state.selCell={r:Number(el.dataset.r),c:Number(el.dataset.c)}; openModal(reasonModal(id,Number(el.dataset.r),Number(el.dataset.c))); break;
+    case 'reason-ok': { const e=initEntry(id); const row=e.rows[Number(el.dataset.r)]; const c=Number(el.dataset.c); const code=document.getElementById('gk').value, note=document.getElementById('gn').value; if(['İhale','Lansman','Rakip hareketi'].includes(code)&&!note.trim()){ toast(code+' kodunda not zorunlu'); break; } row.reason[c]={code,note,by:state.user.name,at:now(),prev:row.reason[c]?row.reason[c].prev:row.ml[c]}; closeModal(); const keep=state.selCell; render(); state.selCell=keep; refreshCell(id); break; }
+    case 'reason-cancel': { const e=initEntry(id); const row=e.rows[Number(el.dataset.r)]; const c=Number(el.dataset.c); row.val[c]=row.pending!=null?row.pending:null; delete row.pending; state.unsaved=Math.max(0,state.unsaved-1); closeModal(); render(); break; }
+    case 'history': openModal(mh('Değişiklik geçmişi')+`<div class="mb"><table class="tbl"><thead><tr><th>Zaman</th><th>Kim</th><th>Hücre</th><th class="num">Önce</th><th class="num">Sonra</th><th>Gerekçe</th></tr></thead><tbody><tr><td>14.10.2026 16:40</td><td>A. Yılmaz</td><td>İstanbul Avrupa, Mar 27</td><td class="num">14.100</td><td class="num">14.600</td><td>Kampanya</td></tr><tr><td>14.10.2026 16:12</td><td>A. Yılmaz</td><td>Toplu: Nis, May 27</td><td class="num">ML</td><td class="num">ML +%3</td><td>eşik altı</td></tr><tr><td>01.10.2026 00:00</td><td>Sistem</td><td>Snapshot Eylül</td><td colspan="3" class="hint">Freeze Kasım, Aralık a kaydı; Mar 28 sütunu eklendi</td></tr></tbody></table></div><div class="mf"><button class="btn" data-act="close">Kapat</button></div>`); break;
+    case 'undo': toast('Son değişiklik geri alındı (prototipte simgesel)'); break;
+  }
+});
+function refreshCell(fid){ const c=document.getElementById('cellcard'); if(c) c.innerHTML=cellCard(fid); document.querySelectorAll('.g td.selc').forEach(t=>t.classList.remove('selc')); if(state.selCell){ const td=document.getElementById(`c-${state.selCell.r}-${state.selCell.c}`); if(td) td.classList.add('selc'); } }
+document.addEventListener('focusin',e=>{ const el=e.target.closest('[data-act="cell"]'); if(!el) return; state.selCell={r:Number(el.dataset.r),c:Number(el.dataset.c)}; refreshCell(route().id); });
+document.addEventListener('change',e=>{
+  const el=e.target.closest('[data-act]'); if(!el) return; const act=el.dataset.act, id=el.dataset.id;
+  if(act==='snap'){ state.snap = el.value==='current'?'current':Number(el.value); render(); return; }
+  if(act==='scope-q'){ state.scopeDraft.q=el.value; openModal(scopeModal(document.querySelector('[data-act=scope-ok]').dataset.target),true); const q=document.querySelector('[data-act=scope-q]'); if(q){ q.focus(); q.setSelectionRange(q.value.length,q.value.length);} return; }
+  if(act==='cell'){ const e2=initEntry(route().id); const row=e2.rows[Number(el.dataset.r)], c=Number(el.dataset.c); const v=parseNum(el.value); const prev=row.val[c]; row.pending=prev; row.val[c]=v; el.value=v==null?'':fmt(v); state.unsaved++; const T=fc(route().id).reasonThreshold||10; const sub=document.querySelector('main .sub'); if(sub) sub.innerHTML=`Kapsamınız: Marmara, ${fc(route().id).level}, <span class="amber">${state.unsaved} kaydedilmemiş hücre</span>`; const tot=el.closest('tr').lastElementChild.querySelector('.c'); if(tot) tot.textContent=fmt(sum(row.val.map((x,i)=>x??row.ml[i]))); if(v!=null&&Math.abs(pct(v,row.ml[c]))>=T&&!row.reason[c]) openModal(reasonModal(route().id,Number(el.dataset.r),c)); else refreshCell(route().id); }
+  else if(act==='drv-cell'){ const s=sc(id); const v=parseNum(el.value); if(v!=null){ s.tufe[Number(el.dataset.i)]=v; s.driversDirty=true; render(); } }
+  else if(act==='drv-const'){ const s=sc(id); const v=parseNum(el.value); if(v!=null){ for(let i=s.start;i<15;i++) s.tufe[i]=v; s.driversDirty=true; render(); } }
+  else if(act==='drv-pct'){ const s=sc(id); const v=parseNum(el.value); if(v!=null){ for(let i=s.start;i<15;i++) s.tufe[i]=TUFE_BASE[i]+v; s.driversDirty=true; render(); } }
+  else if(act==='scen-base'){ const s=sc(id); s.base=el.value; s.driversDirty=true; render(); }
+  else if(act==='scen-start'){ sc(id).start=Number(el.value); render(); }
+  else if(act==='scen-desc'){ sc(id).desc=el.value; }
+  else if(act==='cons-field'){ state.consDraft[el.dataset.k]=el.value; }
+  else if(act==='chain-set'){ state.consDraft.chain[Number(el.dataset.i)]=el.value; render(); }
+  else if(act==='weight'){ state.consDraft.weights[id]=parseNum(el.value)||0; }
+  else if(act==='wiz-field'){ const k=el.dataset.k; state.wizard[k]= el.type==='checkbox'? el.checked : el.value; }
+});
+render();
+</script>
+</body>
+</html>

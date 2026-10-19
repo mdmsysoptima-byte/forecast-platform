@@ -59,6 +59,10 @@ python -m http.server 8090
   yaygın tarih aralıkları yakalandı. Dışına çıkan bir kombinasyon en yakın
   yanıta düşer ve konsola `[mock] tam eslesme yok` notu yazar.
 - **Veri donmuş.** `data/` ne zaman yakalandıysa o. Tarihler ilerlemez.
+- **v2 grubu burada da çalışır.** Alternatif arayüz prototipi bir iframe içinde
+  duruyor, hiç API çağırmıyor ve kendi gömülü verisiyle geliyor; bu yüzden mock
+  ile gerçek sürümde birebir aynı davranır. Yakalanacak bir şeyi yok.
+  Ayrıntı: [`../frontend/static/v2/README.md`](../frontend/static/v2/README.md).
 
 ## Neden dosya adları özet
 

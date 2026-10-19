@@ -226,6 +226,21 @@ body.assistant-open .admin-footer { margin-right: 340px; }
    sessiz kalir ki veri cizgileriyle yarismasin. */
 .apexcharts-xaxis-annotations .freeze-zone text { opacity: .75; }
 
+/* ------------------------------------------------------- v2 prototipi */
+/* Prototip ayri bir dokumanda yasiyor: kendi hash router'i, kendi global
+   CSS'i, kendi tema niteligi var. iframe ucunu de yalitiyor.
+   Yukseklik `calc` ile veriliyor cunku .admin-main ve #view yukseklikleri
+   auto; `height:100%` zinciri cozulmez. Sabit yukseklik ayrica gerekli:
+   prototipin modal ve toast'lari position:fixed ve iframe viewport'una gore
+   konumlaniyor. */
+.v2-frame {
+  display: block;
+  width: 100%;
+  height: calc(100vh - 56px);
+  border: 0;
+}
+.v2-frame[hidden] { display: none; }
+
 /* ---------------------------------------------------------------- grid */
 .fgrid-scroll { overflow: auto; max-height: calc(100vh - 420px); }
 table.fgrid {
