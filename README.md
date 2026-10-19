@@ -57,7 +57,7 @@ satırlarını gösterir ve yalnızca satış katmanı düzenlenebilir.
    (boyut + alt kapsam), Model (çip gösterimli çoklu seçim), Gösterim (zaman birimi,
    toplam/ortalama). **Model karşılaştırma** kartında grafik ve tablo birlikte: seçili
    modellerin her biri bir çizgi ve bir satır, yanlarında sabit referanslar
-   (gerçekleşen, bütçe, geçen yıl). İki dikey kesikli çizgi **bugünü** ve **donma
+   (gerçekleşen, bütçe, geçen yıl). İki dikey kesikli çizgi **bugünü** ve **freeze
    sınırını** gösterir; arası taralıdır — o dönemler çevrim tarafından kapatıldı,
    genişliği `freeze_periods` ayarından gelir. Adet/Ciro düğmesi kartın kendi
    başlığındadır ve yalnızca grafiği değiştirir; tablo ikisini de yan yana taşır.
@@ -246,7 +246,7 @@ karşılığı:
 | Genel | Tüm uç noktalar OpenAPI'de belgeli ve yetki kontrollü; audit log her yazma işlemini kaydeder | `test_api_and_export.py`, `test_governance.py` |
 | Kokpit | Geçmişe tahmin, geleceğe gerçekleşen sızmaz; iki uç pencereyi belirler, ters verilirse düzeltilir, takvim dışı etiket varsayılana düşer; çeyrek ve yıl toplamı aylık toplama eşittir; ciro = adet x fiyat; satış katkıcısı yalnızca kendi kapsamını görür | `test_cockpit.py` |
 | Kokpit tablosu | Gerçekleşenin geleceği boştur; MAPE ile Analiz ekranındaki aynı sayıdır; kapsam daralınca MAPE de daralır; model seçimi tablo, grafik ve doğruluk tablosunu birlikte sürer; ortalama modu toplamı dönem sayısına böler ve grafiğe de uygular | `test_cockpit.py` |
-| Donma bölgesi | Sınır `freeze_periods` ayarından gelir, ekrana sabit yazılmaz; iri kovada donma dönemleri tek kovaya düşerse sınır geri gitmez | `test_cockpit.py` |
+| Freeze bölgesi | Sınır `freeze_periods` ayarından gelir, ekrana sabit yazılmaz; iri kovada freeze dönemleri tek kovaya düşerse sınır geri gitmez | `test_cockpit.py` |
 | Bütçe farkı | Seçili modellerin tamamı tek yanıtta döner, model değiştirmek sunucuya gitmez; ölçü ne olursa olsun adet üzerinden okunur; pencerenin tamamına oturur, bütçesiz dönemler boş gelir | `test_cockpit.py` |
 
 Demo ortamında ölçülen değerler: 200 seri çalıştırma 1,6 ile 2,5 saniye; temel seviye

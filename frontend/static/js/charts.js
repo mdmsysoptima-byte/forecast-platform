@@ -241,7 +241,7 @@ export function forecastChart(el, {
     // Donma bolgesi bir seri degil; gostergede yer alir ama tiklanamaz.
     if (frozen) {
       entries.push({
-        name: freezePeriods ? `Donma · ${freezePeriods} dönem` : "Donma",
+        name: freezePeriods ? `Freeze · ${freezePeriods} dönem` : "Freeze",
         color: primaryInk(), hatch: true, static: true,
       });
     }
@@ -343,7 +343,7 @@ function legendRank(name) {
   if (name === "Gerçekleşen") return 0;
   if (name === "Bütçe") return 91;
   if (name === "Geçen yıl") return 92;
-  if (name.startsWith("Donma")) return 95;
+  if (name.startsWith("Freeze")) return 95;
   const n = /^Model (\d+)$/.exec(name);
   return n ? Number(n[1]) : 50;
 }

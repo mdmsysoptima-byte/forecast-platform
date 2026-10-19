@@ -203,6 +203,13 @@ body.assistant-open .admin-footer { margin-right: 340px; }
   display: flex; align-items: center; gap: .25rem;
   min-height: 31px; height: auto; padding-top: .2rem; padding-bottom: .2rem;
 }
+/* Cipler ikiserli, asagi dogru. Yan yana biriktiklerinde kontrol genisleyip
+   filtre kusagini itiyordu; sutun sayisi sabit olunca genislik de sabit. */
+.multi-select-toggle .chip-grid {
+  display: grid; grid-template-columns: repeat(2, auto);
+  justify-content: start; justify-items: start;
+  gap: .2rem .25rem; width: 100%;
+}
 .multi-select-toggle:focus-visible {
   outline: 2px solid var(--bs-primary); outline-offset: 1px;
 }

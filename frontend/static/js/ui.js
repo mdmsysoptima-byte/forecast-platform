@@ -185,7 +185,9 @@ export function multiSelect(options, values, onChange, { minOne = true, placehol
       toggle.append(el("span", { class: "text-muted", text: placeholder }));
       return;
     }
-    toggle.append(el("span", { class: "d-inline-flex flex-wrap gap-1 align-middle" },
+    // Iki sutun: cipler yan yana birikince kontrol filtre kusagini yatayda
+    // itiyordu. Asagi dogru buyumek kusagin genisligini sabit tutuyor.
+    toggle.append(el("span", { class: "chip-grid" },
       picked.map((o) => el("span", {
         class: "chip", title: o.title || o.label,
       }, [
